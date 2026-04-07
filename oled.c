@@ -1,0 +1,325 @@
+#include "oled.h"
+#include "pico/stdlib.h"
+#include "hardware/i2c.h"
+#include <string.h>
+#include <stdio.h>
+
+#define OLED_WIDTH 128
+#define OLED_HEIGHT 64
+#define OLED_PAGE_COUNT (OLED_HEIGHT / 8)
+
+#define OLED_I2C i2c1
+#define OLED_SDA_PIN 26
+#define OLED_SCL_PIN 27
+#define OLED_ADDR 0x3C
+
+static uint8_t oled_buffer[OLED_WIDTH * OLED_PAGE_COUNT];
+
+static const uint8_t font_ascii[95][5] = {
+    [' ' - 32] = {0x00, 0x00, 0x00, 0x00, 0x00},
+    ['!' - 32] = {0x00, 0x00, 0x5F, 0x00, 0x00},
+    ['"' - 32] = {0x00, 0x07, 0x00, 0x07, 0x00},
+    ['#' - 32] = {0x14, 0x7F, 0x14, 0x7F, 0x14},
+    ['$' - 32] = {0x24, 0x2A, 0x7F, 0x2A, 0x12},
+    ['%' - 32] = {0x23, 0x13, 0x08, 0x64, 0x62},
+    ['&' - 32] = {0x36, 0x49, 0x55, 0x22, 0x50},
+    ['\'' - 32] = {0x00, 0x05, 0x03, 0x00, 0x00},
+    ['(' - 32] = {0x00, 0x1C, 0x22, 0x41, 0x00},
+    [')' - 32] = {0x00, 0x41, 0x22, 0x1C, 0x00},
+    ['*' - 32] = {0x14, 0x08, 0x3E, 0x08, 0x14},
+    ['+' - 32] = {0x08, 0x08, 0x3E, 0x08, 0x08},
+    [',' - 32] = {0x00, 0x50, 0x30, 0x00, 0x00},
+    ['-' - 32] = {0x08, 0x08, 0x08, 0x08, 0x08},
+    ['.' - 32] = {0x00, 0x60, 0x60, 0x00, 0x00},
+    ['/' - 32] = {0x20, 0x10, 0x08, 0x04, 0x02},
+
+    ['0' - 32] = {0x3E, 0x51, 0x49, 0x45, 0x3E},
+    ['1' - 32] = {0x00, 0x42, 0x7F, 0x40, 0x00},
+    ['2' - 32] = {0x62, 0x51, 0x49, 0x49, 0x46},
+    ['3' - 32] = {0x22, 0x49, 0x49, 0x49, 0x36},
+    ['4' - 32] = {0x18, 0x14, 0x12, 0x7F, 0x10},
+    ['5' - 32] = {0x2F, 0x49, 0x49, 0x49, 0x31},
+    ['6' - 32] = {0x3E, 0x49, 0x49, 0x49, 0x32},
+    ['7' - 32] = {0x01, 0x71, 0x09, 0x05, 0x03},
+    ['8' - 32] = {0x36, 0x49, 0x49, 0x49, 0x36},
+    ['9' - 32] = {0x26, 0x49, 0x49, 0x49, 0x3E},
+    [':' - 32] = {0x00, 0x36, 0x36, 0x00, 0x00},
+    [';' - 32] = {0x00, 0x56, 0x36, 0x00, 0x00},
+    ['<' - 32] = {0x08, 0x14, 0x22, 0x41, 0x00},
+    ['=' - 32] = {0x14, 0x14, 0x14, 0x14, 0x14},
+    ['>' - 32] = {0x00, 0x41, 0x22, 0x14, 0x08},
+    ['?' - 32] = {0x02, 0x01, 0x59, 0x09, 0x06},
+    ['@' - 32] = {0x3E, 0x41, 0x5D, 0x59, 0x4E},
+
+    ['A' - 32] = {0x7E, 0x11, 0x11, 0x11, 0x7E},
+    ['B' - 32] = {0x7F, 0x49, 0x49, 0x49, 0x36},
+    ['C' - 32] = {0x3E, 0x41, 0x41, 0x41, 0x22},
+    ['D' - 32] = {0x7F, 0x41, 0x41, 0x22, 0x1C},
+    ['E' - 32] = {0x7F, 0x49, 0x49, 0x49, 0x41},
+    ['F' - 32] = {0x7F, 0x09, 0x09, 0x09, 0x01},
+    ['G' - 32] = {0x3E, 0x41, 0x49, 0x49, 0x7A},
+    ['H' - 32] = {0x7F, 0x08, 0x08, 0x08, 0x7F},
+    ['I' - 32] = {0x00, 0x41, 0x7F, 0x41, 0x00},
+    ['J' - 32] = {0x20, 0x40, 0x41, 0x3F, 0x01},
+    ['K' - 32] = {0x7F, 0x08, 0x14, 0x22, 0x41},
+    ['L' - 32] = {0x7F, 0x40, 0x40, 0x40, 0x40},
+    ['M' - 32] = {0x7F, 0x02, 0x0C, 0x02, 0x7F},
+    ['N' - 32] = {0x7F, 0x04, 0x08, 0x10, 0x7F},
+    ['O' - 32] = {0x3E, 0x41, 0x41, 0x41, 0x3E},
+    ['P' - 32] = {0x7F, 0x09, 0x09, 0x09, 0x06},
+    ['Q' - 32] = {0x3E, 0x41, 0x51, 0x21, 0x5E},
+    ['R' - 32] = {0x7F, 0x09, 0x19, 0x29, 0x46},
+    ['S' - 32] = {0x46, 0x49, 0x49, 0x49, 0x31},
+    ['T' - 32] = {0x01, 0x01, 0x7F, 0x01, 0x01},
+    ['U' - 32] = {0x3F, 0x40, 0x40, 0x40, 0x3F},
+    ['V' - 32] = {0x1F, 0x20, 0x40, 0x20, 0x1F},
+    ['W' - 32] = {0x7F, 0x20, 0x18, 0x20, 0x7F},
+    ['X' - 32] = {0x63, 0x14, 0x08, 0x14, 0x63},
+    ['Y' - 32] = {0x03, 0x04, 0x78, 0x04, 0x03},
+    ['Z' - 32] = {0x61, 0x51, 0x49, 0x45, 0x43},
+
+    ['[' - 32] = {0x00, 0x7F, 0x41, 0x41, 0x00},
+    ['\\' - 32] = {0x02, 0x04, 0x08, 0x10, 0x20},
+    [']' - 32] = {0x00, 0x41, 0x41, 0x7F, 0x00},
+    ['^' - 32] = {0x04, 0x02, 0x01, 0x02, 0x04},
+    ['_' - 32] = {0x40, 0x40, 0x40, 0x40, 0x40},
+    ['`' - 32] = {0x00, 0x01, 0x02, 0x04, 0x00},
+
+    ['a' - 32] = {0x20, 0x54, 0x54, 0x54, 0x78},
+    ['b' - 32] = {0x7F, 0x48, 0x44, 0x44, 0x38},
+    ['c' - 32] = {0x38, 0x44, 0x44, 0x44, 0x20},
+    ['d' - 32] = {0x38, 0x44, 0x44, 0x48, 0x7F},
+    ['e' - 32] = {0x38, 0x54, 0x54, 0x54, 0x18},
+    ['f' - 32] = {0x08, 0x7E, 0x09, 0x01, 0x02},
+    ['g' - 32] = {0x08, 0x14, 0x54, 0x54, 0x3C},
+    ['h' - 32] = {0x7F, 0x08, 0x04, 0x04, 0x78},
+    ['i' - 32] = {0x00, 0x44, 0x7D, 0x40, 0x00},
+    ['j' - 32] = {0x20, 0x40, 0x44, 0x3D, 0x00},
+    ['k' - 32] = {0x7F, 0x10, 0x28, 0x44, 0x00},
+    ['l' - 32] = {0x00, 0x41, 0x7F, 0x40, 0x00},
+    ['m' - 32] = {0x7C, 0x04, 0x18, 0x04, 0x78},
+    ['n' - 32] = {0x7C, 0x08, 0x04, 0x04, 0x78},
+    ['o' - 32] = {0x38, 0x44, 0x44, 0x44, 0x38},
+    ['p' - 32] = {0x7C, 0x14, 0x14, 0x14, 0x08},
+    ['q' - 32] = {0x08, 0x14, 0x14, 0x18, 0x7C},
+    ['r' - 32] = {0x7C, 0x08, 0x04, 0x04, 0x08},
+    ['s' - 32] = {0x48, 0x54, 0x54, 0x54, 0x20},
+    ['t' - 32] = {0x04, 0x3F, 0x44, 0x40, 0x20},
+    ['u' - 32] = {0x3C, 0x40, 0x40, 0x20, 0x7C},
+    ['v' - 32] = {0x1C, 0x20, 0x40, 0x20, 0x1C},
+    ['w' - 32] = {0x3C, 0x40, 0x30, 0x40, 0x3C},
+    ['x' - 32] = {0x44, 0x28, 0x10, 0x28, 0x44},
+    ['y' - 32] = {0x0C, 0x50, 0x50, 0x50, 0x3C},
+    ['z' - 32] = {0x44, 0x64, 0x54, 0x4C, 0x44},
+
+    ['{' - 32] = {0x00, 0x08, 0x36, 0x41, 0x00},
+    ['|' - 32] = {0x00, 0x00, 0x7F, 0x00, 0x00},
+    ['}' - 32] = {0x00, 0x41, 0x36, 0x08, 0x00},
+    ['~' - 32] = {0x08, 0x04, 0x08, 0x10, 0x08}};
+
+static void oled_write_cmd(uint8_t cmd)
+{
+    uint8_t buf[2] = {0x00, cmd};
+    i2c_write_blocking(OLED_I2C, OLED_ADDR, buf, 2, false);
+}
+
+static void oled_write_data(const uint8_t *data, size_t len)
+{
+    uint8_t temp[17];
+    temp[0] = 0x40;
+
+    while (len > 0)
+    {
+        size_t chunk = (len > 16) ? 16 : len;
+        memcpy(&temp[1], data, chunk);
+        i2c_write_blocking(OLED_I2C, OLED_ADDR, temp, chunk + 1, false);
+        data += chunk;
+        len -= chunk;
+    }
+}
+
+static void oled_set_cursor(int column, int page)
+{
+    oled_write_cmd(0xB0 | (page & 0x07));
+    oled_write_cmd(0x00 | (column & 0x0F));
+    oled_write_cmd(0x10 | ((column >> 4) & 0x0F));
+}
+
+static void oled_draw_char(int x, int page, char c)
+{
+    if (x < 0 || x > OLED_WIDTH - 6 || page < 0 || page >= OLED_PAGE_COUNT)
+    {
+        return;
+    }
+
+    if ((unsigned char)c < 32 || (unsigned char)c > 126)
+    {
+        c = '?';
+    }
+
+    int offset = page * OLED_WIDTH + x;
+    for (int i = 0; i < 5; i++)
+    {
+        oled_buffer[offset + i] = font_ascii[c - 32][i];
+    }
+    oled_buffer[offset + 5] = 0x00;
+}
+
+void oled_draw_string(int x, int page, const char *text)
+{
+    while (*text && x <= OLED_WIDTH - 6)
+    {
+        oled_draw_char(x, page, *text++);
+        x += 6;
+    }
+}
+
+void oled_clear(void)
+{
+    memset(oled_buffer, 0, sizeof(oled_buffer));
+}
+
+void oled_update(void)
+{
+    for (int page = 0; page < OLED_PAGE_COUNT; page++)
+    {
+        oled_set_cursor(0, page);
+        oled_write_data(&oled_buffer[page * OLED_WIDTH], OLED_WIDTH);
+    }
+}
+
+void oled_init(void)
+{
+    i2c_init(OLED_I2C, 400000);
+
+    gpio_set_function(OLED_SDA_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_SCL_PIN, GPIO_FUNC_I2C);
+    gpio_pull_up(OLED_SDA_PIN);
+    gpio_pull_up(OLED_SCL_PIN);
+
+    sleep_ms(100);
+
+    oled_write_cmd(0xAE);
+    oled_write_cmd(0x20);
+    oled_write_cmd(0x00);
+    oled_write_cmd(0xB0);
+    oled_write_cmd(0xC8);
+    oled_write_cmd(0x00);
+    oled_write_cmd(0x10);
+    oled_write_cmd(0x40);
+    oled_write_cmd(0x81);
+    oled_write_cmd(0x7F);
+    oled_write_cmd(0xA1);
+    oled_write_cmd(0xA6);
+    oled_write_cmd(0xA8);
+    oled_write_cmd(0x3F);
+    oled_write_cmd(0xA4);
+    oled_write_cmd(0xD3);
+    oled_write_cmd(0x00);
+    oled_write_cmd(0xD5);
+    oled_write_cmd(0x80);
+    oled_write_cmd(0xD9);
+    oled_write_cmd(0xF1);
+    oled_write_cmd(0xDA);
+    oled_write_cmd(0x12);
+    oled_write_cmd(0xDB);
+    oled_write_cmd(0x40);
+    oled_write_cmd(0x8D);
+    oled_write_cmd(0x14);
+    oled_write_cmd(0xAF);
+
+    oled_clear();
+    oled_update();
+}
+
+void oled_show_memory_status(uint16_t pointer,
+                             uint8_t current_value,
+                             uint8_t input_value,
+                             uint8_t output_value,
+                             bool output_valid,
+                             bool read_pin,
+                             bool write_pin,
+                             bool next_pin,
+                             bool back_pin,
+                             const char *builder_text)
+{
+    char line[24];
+    uint8_t page_number = pointer / 16;
+
+    const int LEFT_X = 0;
+    const int RIGHT_X = 66;
+
+    oled_clear();
+
+    snprintf(line, sizeof(line), "PTR:%u", pointer);
+    oled_draw_string(LEFT_X, 0, line);
+
+    snprintf(line, sizeof(line), "MEM:%u", current_value);
+    oled_draw_string(RIGHT_X, 0, line);
+
+    snprintf(line, sizeof(line), "PAGE:%u", page_number);
+    oled_draw_string(LEFT_X, 2, line);
+
+    snprintf(line, sizeof(line), "IN:%u", input_value);
+    oled_draw_string(LEFT_X, 3, line);
+
+    if (output_valid)
+    {
+        snprintf(line, sizeof(line), "OUT:%u", output_value);
+        oled_draw_string(RIGHT_X, 2, line);
+
+        oled_draw_string(RIGHT_X, 3, "ASCII:");
+
+        char shown_char = (output_value >= 32 && output_value <= 126) ? (char)output_value : '?';
+        char char_text[2] = {shown_char, '\0'};
+        oled_draw_string(RIGHT_X + 36, 3, char_text);
+    }
+    else
+    {
+        oled_draw_string(RIGHT_X, 2, "OUT:");
+        oled_draw_string(RIGHT_X, 3, "ASCII:.");
+    }
+
+    oled_draw_string(LEFT_X, 5, "SB:");
+    oled_draw_string(24, 5, builder_text);
+
+    if (write_pin && read_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:SET");
+    else if (write_pin && !read_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:WR");
+    else if (!write_pin && read_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:RD");
+    else if (next_pin && back_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:RST");
+    else if (next_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:NEXT");
+    else if (back_pin)
+        oled_draw_string(LEFT_X, 7, "MODE:BACK");
+    else
+        oled_draw_string(LEFT_X, 7, "MODE:IDLE");
+
+    oled_update();
+}
+
+void oled_show_output_string(const char *text)
+{
+    oled_clear();
+    oled_draw_string(0, 0, "OUTPUT:");
+    oled_draw_string(0, 2, text);
+    oled_update();
+}
+
+void oled_show_builder_string(const char *text)
+{
+    oled_clear();
+    oled_draw_string(0, 0, "SB:");
+    oled_draw_string(0, 2, text);
+    oled_update();
+}
+
+void oled_show_halt(void)
+{
+    oled_clear();
+    oled_draw_string(0, 1, "HALT");
+    oled_update();
+}
