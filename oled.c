@@ -241,7 +241,7 @@ void oled_show_memory_status(uint16_t pointer,
                              bool write_pin,
                              bool next_pin,
                              bool back_pin,
-                             const char *builder_text)
+                             const char *sb_text)
 {
     char line[24];
     uint8_t page_number = pointer / 16;
@@ -269,7 +269,6 @@ void oled_show_memory_status(uint16_t pointer,
         oled_draw_string(RIGHT_X, 2, line);
 
         oled_draw_string(RIGHT_X, 3, "ASCII:");
-
         char shown_char = (output_value >= 32 && output_value <= 126) ? (char)output_value : '?';
         char char_text[2] = {shown_char, '\0'};
         oled_draw_string(RIGHT_X + 36, 3, char_text);
@@ -281,7 +280,7 @@ void oled_show_memory_status(uint16_t pointer,
     }
 
     oled_draw_string(LEFT_X, 5, "SB:");
-    oled_draw_string(24, 5, builder_text);
+    oled_draw_string(24, 5, sb_text ? sb_text : "");
 
     if (write_pin && read_pin)
         oled_draw_string(LEFT_X, 7, "MODE:SET");
@@ -304,22 +303,14 @@ void oled_show_memory_status(uint16_t pointer,
 void oled_show_output_string(const char *text)
 {
     oled_clear();
-    oled_draw_string(0, 0, "OUTPUT:");
-    oled_draw_string(0, 2, text);
-    oled_update();
-}
-
-void oled_show_builder_string(const char *text)
-{
-    oled_clear();
-    oled_draw_string(0, 0, "SB:");
-    oled_draw_string(0, 2, text);
+    oled_draw_string(0, 1, "SB OUTPUT");
+    oled_draw_string(0, 3, text ? text : "");
     oled_update();
 }
 
 void oled_show_halt(void)
 {
     oled_clear();
-    oled_draw_string(0, 1, "HALT");
+    oled_draw_string(40, 3, "HALT");
     oled_update();
 }

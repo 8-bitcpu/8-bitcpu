@@ -6,10 +6,12 @@
 
 void oled_init(void);
 void oled_clear(void);
-void oled_show_output_string(const char *text);
-void oled_show_builder_string(const char *text);
-void oled_show_halt(void);
+void oled_update(void);
+
 void oled_draw_string(int x, int page, const char *text);
+
+void oled_show_output_string(const char *text);
+void oled_show_halt(void);
 
 void oled_show_memory_status(uint16_t pointer,
                              uint8_t current_value,
@@ -20,8 +22,6 @@ void oled_show_memory_status(uint16_t pointer,
                              bool write_pin,
                              bool next_pin,
                              bool back_pin,
-                             const char *builder_text);
-
-void oled_update(void);
+                             const char *sb_text);
 
 #endif

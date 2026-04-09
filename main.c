@@ -11,13 +11,20 @@
 #define NEXT_PIN 10      // GP10
 #define BACK_PIN 11      // GP11
 #define BUS_OUT_START 12 // GP12-GP19
-
-#define PRELOAD_PIN 20 // GP20
-#define IN_PIN 21      // GP21
-#define OUT_PIN 22     // GP22
+#define IN_PIN 20        // GP20 - IN trigger
+#define OUT_PIN 21       // GP21 - OUT trigger
+#define PRELOAD_PIN 22   // GP22 - preload trigger
 
 #define OLED_UPDATE_US 120000
-#define STRING_BUILDER_SIZE 64
+#define STRING_BUILDER_MAX 18
+#define OVERLAY_TIME_MS 5000
+
+/*
+ * Control bus settle time:
+ * wait this long after a detected control-state change
+ * before deciding what the command really is.
+ */
+#define CONTROL_SETTLE_US 1000
 
 typedef struct
 {
@@ -25,40 +32,45 @@ typedef struct
     bool write_pin;
     bool next_pin;
     bool back_pin;
+    bool in_pin;
+    bool out_pin;
+    bool preload_pin;
 } control_state_t;
 
-static char output_builder[STRING_BUILDER_SIZE];
-static int output_builder_len = 0;
-
-static void builder_clear(void)
+typedef enum
 {
-    output_builder_len = 0;
-    output_builder[0] = '\0';
-}
+    DISPLAY_MAIN = 0,
+    DISPLAY_HALT,
+    DISPLAY_SB
+} display_mode_t;
 
-static void builder_append_ascii(uint8_t value)
+/*
+ * Easy-to-edit preload image.
+ *
+ * Program:
+ *   0   LOAD 10
+ *   1   STORE 11
+ *   2   HALT
+ *
+ * Data:
+ *   10  42
+ *   11  0
+ *
+ * Everything not listed stays 0 automatically.
+ */
+static const uint8_t preload_image[MEMORY_SIZE] = {
+    [0] = 10,  // LOAD 10
+    [1] = 27,  // STORE 11  (change this to your real encoded value if needed)
+    [2] = 240, // HALT      (change this to your real encoded value if needed)
+
+    [10] = 42,
+    [11] = 0};
+
+static const uint16_t preload_image_size = MEMORY_SIZE;
+
+static void preload_memory_image(void)
 {
-    if (value < 32 || value > 126)
-    {
-        printf("APPEND BLOCKED: value=%u not printable ASCII\n", value);
-        return;
-    }
-
-    if (output_builder_len >= STRING_BUILDER_SIZE - 1)
-    {
-        printf("APPEND BLOCKED: builder full\n");
-        return;
-    }
-
-    output_builder[output_builder_len++] = (char)value;
-    output_builder[output_builder_len] = '\0';
-
-    printf("APPENDED: %u '%c' -> \"%s\"\n", value, (char)value, output_builder);
-}
-
-static bool is_halt_instruction(uint8_t value)
-{
-    return ((value & 0xF0) == 0xF0);
+    memory_load_image(preload_image, preload_image_size);
 }
 
 static void init_input_bus(void)
@@ -73,21 +85,9 @@ static void init_input_bus(void)
 
 static void init_control_pins(void)
 {
-    int pins[] = {READ_PIN, WRITE_PIN, NEXT_PIN, BACK_PIN};
+    int pins[] = {READ_PIN, WRITE_PIN, NEXT_PIN, BACK_PIN, IN_PIN, OUT_PIN, PRELOAD_PIN};
 
-    for (int i = 0; i < 4; i++)
-    {
-        gpio_init(pins[i]);
-        gpio_set_dir(pins[i], GPIO_IN);
-        gpio_pull_down(pins[i]);
-    }
-}
-
-static void init_extra_pins(void)
-{
-    int pins[] = {PRELOAD_PIN, IN_PIN, OUT_PIN};
-
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 7; i++)
     {
         gpio_init(pins[i]);
         gpio_set_dir(pins[i], GPIO_IN);
@@ -149,6 +149,9 @@ static control_state_t read_control_state(void)
     s.write_pin = gpio_get(WRITE_PIN);
     s.next_pin = gpio_get(NEXT_PIN);
     s.back_pin = gpio_get(BACK_PIN);
+    s.in_pin = gpio_get(IN_PIN);
+    s.out_pin = gpio_get(OUT_PIN);
+    s.preload_pin = gpio_get(PRELOAD_PIN);
     return s;
 }
 
@@ -157,25 +160,86 @@ static bool same_control_state(control_state_t a, control_state_t b)
     return (a.read_pin == b.read_pin) &&
            (a.write_pin == b.write_pin) &&
            (a.next_pin == b.next_pin) &&
-           (a.back_pin == b.back_pin);
+           (a.back_pin == b.back_pin) &&
+           (a.in_pin == b.in_pin) &&
+           (a.out_pin == b.out_pin) &&
+           (a.preload_pin == b.preload_pin);
 }
 
 static bool is_idle_state(control_state_t s)
 {
-    return !s.read_pin && !s.write_pin && !s.next_pin && !s.back_pin;
+    return !s.read_pin &&
+           !s.write_pin &&
+           !s.next_pin &&
+           !s.back_pin &&
+           !s.in_pin &&
+           !s.out_pin &&
+           !s.preload_pin;
 }
 
-static void do_preload(void)
+static bool is_halt_bus_pattern(uint8_t input_bus)
 {
-    memory_preload_cpu_workflow();
-    builder_clear();
+    return ((input_bus & 0xF0) == 0xF0); // GP4,5,6,7 all high
+}
 
-    printf("PRELOAD TRIGGERED\n");
-    printf("memory[0]  = %u\n", memory_peek(0));
-    printf("memory[4]  = %u\n", memory_peek(4));
-    printf("memory[16] = %u '%c'\n", memory_peek(16), memory_peek(16));
-    printf("memory[17] = %u '%c'\n", memory_peek(17), memory_peek(17));
-    printf("memory[18] = %u '%c'\n", memory_peek(18), memory_peek(18));
+static char ascii_from_value(uint8_t value)
+{
+    if (value >= 32 && value <= 126)
+    {
+        return (char)value;
+    }
+
+    return '?';
+}
+
+static void append_char_to_string_builder(char *buffer, int *length, char c)
+{
+    if (*length < (STRING_BUILDER_MAX - 1))
+    {
+        buffer[*length] = c;
+        (*length)++;
+        buffer[*length] = '\0';
+    }
+    else
+    {
+        for (int i = 1; i < STRING_BUILDER_MAX - 1; i++)
+        {
+            buffer[i - 1] = buffer[i];
+        }
+
+        buffer[STRING_BUILDER_MAX - 2] = c;
+        buffer[STRING_BUILDER_MAX - 1] = '\0';
+        *length = STRING_BUILDER_MAX - 1;
+    }
+}
+
+static void clear_string_builder(char *buffer, int *length)
+{
+    *length = 0;
+    buffer[0] = '\0';
+}
+
+/*
+ * Read control bus until two consecutive samples match.
+ * This prevents reacting to a partial combination like:
+ *   R first, then W
+ * or
+ *   NEXT first, then BACK
+ */
+static control_state_t read_stable_control_state(void)
+{
+    control_state_t first = read_control_state();
+    sleep_us(CONTROL_SETTLE_US);
+    control_state_t second = read_control_state();
+
+    while (!same_control_state(first, second))
+    {
+        first = second;
+        sleep_us(CONTROL_SETTLE_US);
+        second = read_control_state();
+    }
+
+    return second;
 }
 
 int main(void)
@@ -186,20 +250,15 @@ int main(void)
     memory_init();
     init_input_bus();
     init_control_pins();
-    init_extra_pins();
     init_output_bus();
     oled_init();
-    builder_clear();
-
-    do_preload();
-    oled_show_output_string("PRELOADED");
-    sleep_ms(1000);
 
     absolute_time_t last_oled_update = get_absolute_time();
+    absolute_time_t overlay_end_time = get_absolute_time();
 
-    control_state_t last_control_state = read_control_state();
-    bool last_preload_state = gpio_get(PRELOAD_PIN);
+    display_mode_t display_mode = DISPLAY_MAIN;
 
+    control_state_t last_control_state = read_stable_control_state();
     uint8_t last_input_bus = read_input_bus();
 
     uint8_t input_bus = last_input_bus;
@@ -207,55 +266,101 @@ int main(void)
     uint8_t current_memory_value = memory_read();
     bool output_valid = false;
 
+    char string_builder[STRING_BUILDER_MAX];
+    int string_builder_length = 0;
+    clear_string_builder(string_builder, &string_builder_length);
+
     uint16_t last_ptr = 0xFFFF;
     uint8_t last_mem = 0xFF;
     uint8_t last_inbus_for_oled = 0xFF;
     uint8_t last_out = 0xFF;
     bool last_output_valid = false;
     control_state_t last_oled_state = last_control_state;
-
-    /*
-     * Append condition latch:
-     * append once for a given valid (IN=1, R=1, W=0, PTR, OUTVAL) condition.
-     * Re-arm when the condition is broken or when pointer/value changes.
-     */
-    bool append_done_for_current_condition = false;
-    uint16_t append_condition_ptr = 0xFFFF;
-    uint8_t append_condition_value = 0xFF;
+    bool force_refresh = true;
 
     while (true)
     {
-        bool preload_state = gpio_get(PRELOAD_PIN);
-        bool in_state = gpio_get(IN_PIN);
-        bool out_state = gpio_get(OUT_PIN);
-
-        control_state_t control_state = read_control_state();
+        control_state_t raw_control_state = read_control_state();
         input_bus = read_input_bus();
 
-        if (preload_state && !last_preload_state)
+        bool raw_control_changed = !same_control_state(raw_control_state, last_control_state);
+        bool input_bus_changed = (input_bus != last_input_bus);
+
+        control_state_t control_state = raw_control_state;
+
+        /*
+         * If the control bus changed, wait for it to settle before using it.
+         */
+        if (raw_control_changed)
         {
-            do_preload();
+            control_state = read_stable_control_state();
+        }
+
+        bool control_changed = !same_control_state(control_state, last_control_state);
+
+        bool halt_active = is_halt_bus_pattern(input_bus);
+        bool last_halt_active = is_halt_bus_pattern(last_input_bus);
+        bool halt_rising_edge = (!last_halt_active && halt_active);
+
+        bool out_rising_edge = (!last_control_state.out_pin && control_state.out_pin);
+        bool in_rising_edge = (!last_control_state.in_pin && control_state.in_pin);
+        bool preload_rising_edge = (!last_control_state.preload_pin && control_state.preload_pin);
+
+        /*
+         * PRELOAD has highest priority.
+         * It only happens on a settled rising edge of GP22.
+         */
+        if (preload_rising_edge)
+        {
+            preload_memory_image();
+
             current_memory_value = memory_read();
             output_value = 0;
             output_valid = false;
+            disable_output_bus();
 
-            append_done_for_current_condition = false;
-            append_condition_ptr = 0xFFFF;
-            append_condition_value = 0xFF;
+            display_mode = DISPLAY_MAIN;
+            force_refresh = true;
 
-            oled_show_output_string("PRELOADED");
-            sleep_ms(300);
+            printf("PRELOAD TRIGGERED ON GP22 | Memory image loaded | Pointer reset to 0\n");
+            printf("MEM[0]=%u MEM[1]=%u MEM[2]=%u MEM[10]=%u MEM[11]=%u\n",
+                   memory_peek(0),
+                   memory_peek(1),
+                   memory_peek(2),
+                   memory_peek(10),
+                   memory_peek(11));
         }
-        last_preload_state = preload_state;
-
-        bool control_changed = !same_control_state(control_state, last_control_state);
-        bool input_bus_changed = (input_bus != last_input_bus);
-
-        if (control_changed || input_bus_changed)
+        else if (halt_rising_edge)
         {
-            if (control_changed ||
-                ((control_state.write_pin && control_state.read_pin) ||
-                 (control_state.write_pin && !control_state.read_pin)))
+            /*
+             * HALT clears all memory and resets pointer to 0.
+             * Also clear output bus state.
+             * Clear SB too if you want HALT to fully reset everything.
+             */
+            memory_clear_all();
+            current_memory_value = memory_read();
+
+            output_value = 0;
+            output_valid = false;
+            disable_output_bus();
+
+            clear_string_builder(string_builder, &string_builder_length);
+
+            display_mode = DISPLAY_HALT;
+            overlay_end_time = make_timeout_time_ms(OVERLAY_TIME_MS);
+            force_refresh = true;
+
+            printf("HALT TRIGGERED | Memory cleared | Pointer reset | SB cleared\n");
+        }
+        else
+        {
+            /*
+             * Execute memory control action once per new stable control state.
+             * This avoids:
+             *   R alone being interpreted before W also arrives
+             *   NEXT alone being interpreted before BACK also arrives
+             */
+            if (control_changed)
             {
                 uint8_t step_result = memory_step(
                     control_state.write_pin,
@@ -279,101 +384,77 @@ int main(void)
 
                 current_memory_value = memory_read();
 
-                printf("CTRL R=%d W=%d N=%d B=%d | PTR=%u | MEM=%u | INBUS=%u | STEP=%u | INPIN=%d | OUTPIN=%d\n",
+                printf("CTRL R=%d W=%d N=%d B=%d IN=%d OUT=%d PRE=%d | PTR=%u | MEM=%u | INBUS=%u | STEP=%u | SB=\"%s\"\n",
                        control_state.read_pin,
                        control_state.write_pin,
                        control_state.next_pin,
                        control_state.back_pin,
+                       control_state.in_pin,
+                       control_state.out_pin,
+                       control_state.preload_pin,
                        memory_get_pointer(),
                        current_memory_value,
                        input_bus,
                        step_result,
-                       in_state,
-                       out_state);
+                       string_builder);
             }
-        }
 
-        /*
-         * While in READ mode, always keep current output synced.
-         */
-        if (!control_state.write_pin && control_state.read_pin)
-        {
-            output_value = memory_read();
-            output_valid = true;
-            enable_output_bus();
-            write_output_bus(output_value);
-        }
-        else if (is_idle_state(control_state))
-        {
-            output_valid = false;
-            disable_output_bus();
-        }
-
-        current_memory_value = memory_read();
-
-        /*
-         * Main append rule:
-         * if IN=1 and R=1 and W=0 and output_valid=1
-         * then append once for this current pointer/value condition.
-         */
-        bool append_condition_active =
-            in_state &&
-            control_state.read_pin &&
-            !control_state.write_pin &&
-            output_valid;
-
-        if (append_condition_active)
-        {
-            bool same_as_last_append_condition =
-                append_done_for_current_condition &&
-                (memory_get_pointer() == append_condition_ptr) &&
-                (output_value == append_condition_value);
-
-            printf("APPEND CHECK | IN=%d R=%d W=%d PTR=%u OUT=%u DONE=%d SAME=%d\n",
-                   in_state,
-                   control_state.read_pin,
-                   control_state.write_pin,
-                   memory_get_pointer(),
-                   output_value,
-                   append_done_for_current_condition,
-                   same_as_last_append_condition);
-
-            if (!same_as_last_append_condition)
-            {
-                builder_append_ascii(output_value);
-
-                append_done_for_current_condition = true;
-                append_condition_ptr = memory_get_pointer();
-                append_condition_value = output_value;
-
-                printf("SB NOW -> \"%s\"\n", output_builder);
-            }
-        }
-        else
-        {
             /*
-             * Condition broke, so re-arm append for next valid condition.
+             * Keep bus driven while stable READ-only is being held.
+             * Do not re-execute memory_step here.
              */
-            append_done_for_current_condition = false;
-            append_condition_ptr = 0xFFFF;
-            append_condition_value = 0xFF;
+            if (!control_state.write_pin && control_state.read_pin)
+            {
+                output_value = memory_read();
+                output_valid = true;
+                enable_output_bus();
+                write_output_bus(output_value);
+            }
+            else if (is_idle_state(control_state))
+            {
+                output_valid = false;
+                disable_output_bus();
+            }
+
+            current_memory_value = memory_read();
+
+            /*
+             * IN / OUT are also based on the settled control state,
+             * so they trigger once when the stable state rises.
+             */
+            if (in_rising_edge)
+            {
+                char appended_char = ascii_from_value(current_memory_value);
+                append_char_to_string_builder(string_builder, &string_builder_length, appended_char);
+
+                printf("IN TRIGGER | PTR=%u | MEM=%u | ASCII=%c | SB=\"%s\"\n",
+                       memory_get_pointer(),
+                       current_memory_value,
+                       appended_char,
+                       string_builder);
+            }
+
+            if (out_rising_edge)
+            {
+                display_mode = DISPLAY_SB;
+                overlay_end_time = make_timeout_time_ms(OVERLAY_TIME_MS);
+                force_refresh = true;
+
+                printf("OUT TRIGGER | \"%s\"\n", string_builder);
+            }
         }
 
-        if (out_state)
+        if (display_mode != DISPLAY_MAIN &&
+            absolute_time_diff_us(get_absolute_time(), overlay_end_time) <= 0)
         {
-            oled_show_output_string(output_builder);
-        }
-        else if (!control_state.write_pin &&
-                 control_state.read_pin &&
-                 output_valid &&
-                 is_halt_instruction(output_value))
-        {
-            oled_show_halt();
+            display_mode = DISPLAY_MAIN;
+            force_refresh = true;
         }
 
-        if (absolute_time_diff_us(last_oled_update, get_absolute_time()) > OLED_UPDATE_US)
+        if (absolute_time_diff_us(last_oled_update, get_absolute_time()) > OLED_UPDATE_US || force_refresh)
         {
             bool oled_changed =
+                force_refresh ||
                 (memory_get_pointer() != last_ptr) ||
                 (current_memory_value != last_mem) ||
                 (input_bus != last_inbus_for_oled) ||
@@ -381,18 +462,15 @@ int main(void)
                 (output_valid != last_output_valid) ||
                 !same_control_state(control_state, last_oled_state);
 
-            if (oled_changed || !out_state)
+            if (oled_changed)
             {
-                if (out_state)
-                {
-                    oled_show_output_string(output_builder);
-                }
-                else if (!control_state.write_pin &&
-                         control_state.read_pin &&
-                         output_valid &&
-                         is_halt_instruction(output_value))
+                if (display_mode == DISPLAY_HALT)
                 {
                     oled_show_halt();
+                }
+                else if (display_mode == DISPLAY_SB)
+                {
+                    oled_show_output_string(string_builder);
                 }
                 else
                 {
@@ -406,7 +484,7 @@ int main(void)
                         control_state.write_pin,
                         control_state.next_pin,
                         control_state.back_pin,
-                        output_builder);
+                        string_builder);
                 }
 
                 last_ptr = memory_get_pointer();
@@ -418,6 +496,7 @@ int main(void)
             }
 
             last_oled_update = get_absolute_time();
+            force_refresh = false;
         }
 
         last_control_state = control_state;
