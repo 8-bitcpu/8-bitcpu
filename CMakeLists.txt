@@ -17,7 +17,6 @@ add_executable(memory_controller
     string_builder.c
     preload.c
     memory.c
-    oled.c
 )
 
 target_include_directories(memory_controller PRIVATE

@@ -7,7 +7,8 @@ static const uint8_t preload_image[MEMORY_SIZE] = {
     [1] = 27,
     [2] = 240,
     [10] = 42,
-    [11] = 0};
+    [11] = 0
+};
 
 void preload_memory_image(void)
 {
