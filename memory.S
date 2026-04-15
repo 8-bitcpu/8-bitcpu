@@ -226,7 +226,7 @@ MEMORY_STEP:
         bl MEMORY_BACK_PAGE
         b END_FUNCTION_RETURN_ZERO
 
-    CASE_FOUR:s
+    CASE_FOUR:
         ldr r0, =BUS_VALUE
         ldrb r0, [r0]
         bl MEMORY_SET_LOCATION
