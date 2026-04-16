@@ -14,6 +14,10 @@ add_executable(memory_controller
     memory.S
     app.c
     bus.c
+    memory.h
+    control.c
+    INITIALIZE_PINS.S
+	
 )
 
 target_link_libraries(memory_controller

@@ -1,0 +1,5 @@
+export PICO_SDK_PATH=$HOME/pico-sdk
+
+looks like i can collapse the entire architecture of the code and just have "something" deal with the output side
+
+currently memory.S reads input pins but something needs to place stuff on the output register  

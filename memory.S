@@ -106,6 +106,8 @@ MEMORY_RESET_POINTER:
     strb r1, [r0]
 bx lr 
 
+
+@ dont forget these two need to be changed so they move off biass
 .thumb_func
 MEMORY_NEXT_PAGE:
     ldr r0, =PTR
