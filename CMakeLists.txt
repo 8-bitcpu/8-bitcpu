@@ -1,27 +1,33 @@
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.13)
 
 include(pico_sdk_import.cmake)
 
-project(pico_ram C CXX ASM)
+project(memory_controller C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-add_executable(pico_ram
+add_executable(memory_controller
     main.c
     memory.c
+    app.c
+    bus.c
+    control.c
+    preload.c
+    string_builder.c
     oled.c
+    memory.s
 )
 
-target_include_directories(pico_ram PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-)
-
-target_link_libraries(pico_ram
+target_link_libraries(memory_controller
     pico_stdlib
+    hardware_gpio
     hardware_i2c
 )
 
-pico_add_extra_outputs(pico_ram)
+pico_enable_stdio_usb(memory_controller 1)
+pico_enable_stdio_uart(memory_controller 0)
+
+pico_add_extra_outputs(memory_controller)

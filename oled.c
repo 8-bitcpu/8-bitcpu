@@ -251,24 +251,25 @@ void oled_show_memory_status(uint16_t pointer,
 
     oled_clear();
 
-    snprintf(line, sizeof(line), "PTR:%u", pointer);
+    snprintf(line, sizeof(line), "Pointer:%u", pointer);
     oled_draw_string(LEFT_X, 0, line);
 
-    snprintf(line, sizeof(line), "MEM:%u", current_value);
+    snprintf(line, sizeof(line), "Memory:%u", current_value);
     oled_draw_string(RIGHT_X, 0, line);
 
-    snprintf(line, sizeof(line), "PAGE:%u", page_number);
+    snprintf(line, sizeof(line), "Page:%u", page_number);
     oled_draw_string(LEFT_X, 2, line);
 
+    // Move IN BELOW with spacing
     snprintf(line, sizeof(line), "IN:%u", input_value);
-    oled_draw_string(LEFT_X, 3, line);
+    oled_draw_string(LEFT_X, 4, line);
 
     if (output_valid)
     {
         snprintf(line, sizeof(line), "OUT:%u", output_value);
-        oled_draw_string(RIGHT_X, 2, line);
+        oled_draw_string(LEFT_X, 3, line);
 
-        oled_draw_string(RIGHT_X, 3, "ASCII:");
+        // oled_draw_string(RIGHT_X, 3, "ASCII:");
         char shown_char = (output_value >= 32 && output_value <= 126) ? (char)output_value : '?';
         char char_text[2] = {shown_char, '\0'};
         oled_draw_string(RIGHT_X + 36, 3, char_text);
@@ -276,11 +277,11 @@ void oled_show_memory_status(uint16_t pointer,
     else
     {
         oled_draw_string(RIGHT_X, 2, "OUT:");
-        oled_draw_string(RIGHT_X, 3, "ASCII:.");
+        // oled_draw_string(RIGHT_X, 3, "ASCII:.");
     }
 
-    oled_draw_string(LEFT_X, 5, "SB:");
-    oled_draw_string(24, 5, sb_text ? sb_text : "");
+    // oled_draw_string(LEFT_X, 5, "SB:");
+    // oled_draw_string(24, 5, sb_text ? sb_text : "");
 
     if (write_pin && read_pin)
         oled_draw_string(LEFT_X, 7, "MODE:SET");
