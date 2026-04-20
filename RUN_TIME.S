@@ -1,0 +1,323 @@
+@ base versions of these methods will be written with the intention of upgrading
+@ them later to report to the OLED on the pico
+
+.syntax unified
+.thumb
+
+.extern MEM_BUFFER
+.extern PTR 
+.extern PAGE_SIZE
+
+
+.global READ_ALL_PINS
+.global VERIFY_PIO_PINS_STABLE
+.global VERIFY_CONTROL_PINS_STABLE
+.global OUTPUT_BUS_ENABLE
+.global OUTPUT_BUS_DISABLE
+.global OUTPUT_BUS_WRITE
+.global HANDLE_PRELOAD
+.global HANDLE_HALT
+.global HANDLE_IN
+.global HANDLE_OUT
+.global RUNTIME_STEP
+
+.bss
+.align 2
+
+GPIO_STATE: .space 4 
+PREV_GPIO_STATE: .space 4
+CONTROL_PINS_STABLE: .space 1
+PIO_PINS_STABLE: .space 1
+IN_BUS_VALUE: .space 1
+PRE_LOAD_PIN: .space 1
+
+@ GPIO 20 = preload memory
+@ GPIO 21 = IN 
+@ GPIO 22 = OUT 
+
+
+.text
+.thumb_func
+READ_ALL_PINS:
+    ldr r0, =0xD0000004
+    ldr r1, [r0]
+
+    ldr r2, =GPIO_STATE
+    str r1, [r2]
+bx lr
+
+.thumb_func
+VERIFY_PIO_PINS_STABLE:
+    bl READ_ALL_PINS
+
+    ldr r2, =GPIO_STATE
+    ldr r0, [r2]
+    lsrs r0, r0, #20
+    movs r2, #0x7
+    ands r0, r2
+
+    movs r3, #255
+DUMB_LOOP:
+    subs r3, #1
+    bne DUMB_LOOP
+
+    bl READ_ALL_PINS
+
+    ldr r2, =GPIO_STATE
+    ldr r1, [r2]
+    lsrs r1, r1, #20
+    movs r2, #0x7
+    ands r1, r2
+
+    cmp r0, r1
+    beq P_STABLE_YES
+    b VERIFY_PIO_PINS_STABLE
+
+P_STABLE_YES:
+    ldr r0, =PIO_PINS_STABLE
+    strb r1, [r0]
+bx lr
+
+
+.thumb_func
+VERIFY_CONTROL_PINS_STABLE:
+    bl READ_ALL_PINS
+
+    ldr r2, =GPIO_STATE
+    ldr r0, [r2]
+    lsrs r0, r0, #8
+    movs r2, #0xF
+    ands r0, r2
+
+    movs r3, #255
+    DUMB_LOOP2:
+    subs r3, #1
+        bne DUMB_LOOP2
+    
+    bl READ_ALL_PINS
+
+    ldr r2, =GPIO_STATE
+    ldr r1, [r2]
+    lsrs r1, r1, #8
+    movs r2, #0xF
+    ands r1, r2
+
+    cmp r0, r1
+
+        beq C_STABLE_YES
+    b VERIFY_CONTROL_PINS_STABLE
+
+    C_STABLE_YES:
+    ldr r0, =CONTROL_PINS_STABLE
+    strb r1, [r0] 
+bx lr
+
+READ_IN_BUS_VALUE:
+    ldr r0, =GPIO_STATE
+    ldr r1, [r0]
+    movs r2, #0xFF
+    ands r1, r2
+    ldr r0, =INPUT_BUS
+    strb r1, [r0]
+    movs r0, r1 @ little hacky but the bus value should just be kept in r0 for better integration later
+bx lr
+
+
+.thumb_func
+OUTPUT_BUS_ENABLE:
+    ldr r0, =0xD0000024
+    ldr r1, =0x000FF000
+    str r1, [r0]
+bx lr
+
+.thumb_func
+OUTPUT_BUS_DISABLE:
+    ldr r0, =0xD0000028
+    ldr r1, =0x000FF000
+    str r1, [r0]
+bx lr
+
+.thumb_func
+OUTPUT_BUS_WRITE:
+    @ huh? looks like this just writes directly to the output reg
+    movs r2, #0xFF
+    ands r0, r2
+    lsls r0, r0, #12            @ line up with GP12-GP19
+
+    ldr r1, =0xD0000020         @ SIO GPIO_OUT_CLR
+    ldr r2, =0x000FF000         @ bus mask
+    str r2, [r1]                @ clear old bus bits
+
+    ldr r1, =0xD0000018         @ SIO GPIO_OUT_SET
+    str r0, [r1]                @ set new bus bits
+bx lr
+
+.thumb_func
+HANDLE_PRELOAD:
+@ask kyran how he wants to deal with preloads 
+bx lr 
+
+@ Halt means next and back pins are high 
+@its possible this method can report to OLED "HALT DETECTED" kinda dealq
+.thumb_func
+HANDLE_HALT:
+    bl OUTPUT_BUS_DISABLE
+    bl MEMORY_CLEAR_ALL @this clears the memory & resets the pointer 
+    bl CLEAR_STRING_BUFFER
+
+bx lr
+
+@ GPIO PIN 21 = IN
+.thumb_func
+HANDLE_IN:
+    bl MEMORY_READ
+    bl SB_DETERMINE_ASCII
+    bl SB_APPEND_CHAR
+bx lr 
+
+@ this will take the current string buffer and print it to the oled screen
+.thumb_func
+HANDLE_OUT:
+
+bx lr 
+
+
+@ agony!!!
+.thumb_func
+RUNTIME_STEP:
+    push {lr}
+
+    bl VERIFY_CONTROL_PINS_STABLE
+    bl VERIFY_PIO_PINS_STABLE
+    bl READ_IN_BUS_VALUE
+
+    @ PRELOADS WILL BE DELT WITH LATER THIS SKELE MUST EXIST
+
+    ldr r0, =CONTROL_PINS_STABLE    @ halt case logic
+    ldrb r1, [r0]
+    cmp r1, #0
+    beq DO_HANDLE_HALT
+
+    @ handle_in case logic
+    ldr r0, =PIO_PINS_STABLE
+    ldrb r1, [r0]
+    
+    movs r2, #0x2
+    ands r1, r2
+    cmp r1, #0 
+    bne DO_HANDLE_IN
+
+    @ handle_out case logic 
+    ldr r0, =PIO_PINS_STABLE
+    ldrb r1, [r0]
+    
+    movs r2, #0x4
+    ands r1, r2
+    cmp r1, #0
+    bne DO_HANDLE_OUT
+
+    @ mem reset pointer logic
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+    
+    movs r1, r3
+    movs r2, #0xC
+    ands r1, r2
+    cmp r1, r2
+    beq DO_RESET_PTR
+
+    @ do next page pogic 
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r1, [r0]
+
+    movs r2, #0x4
+    ands r1, r2
+    cmp r1, #0
+    bne DO_NEXT_PAGE
+
+    @ do back page pogic 
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r1, [r0]
+
+    movs r2, #0x8
+    ands r1, r2
+    cmp r1, #0
+    bne DO_BACK_PAGE
+
+    @ mem set location logic 
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+
+    movs r1, r3
+    movs r2, #0x3      @ READ + WRITE
+    ands r1, r2
+    cmp r1, r2
+    beq DO_MEMORY_SET_LOCATION
+
+    @logic for mem write 
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+
+    movs r1, r3
+    movs r2, #0x3
+    ands r1, r2
+    cmp r1, #0x2
+    beq DO_MEMORY_WRITE
+
+    @ output_bus_write logic
+    @ this method takes the value at whereever mem pointer is and gives it to the output bus
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+
+    movs r1, r3
+    movs r2, #0x3
+    ands r1, r2
+    cmp r1, #0x1
+    beq DO_OUTPUT_BUS_ENABLE
+
+    @ "default case" do nothing mayb make this report somewhere if happens
+    b END_RUNTIME_STEP
+
+    DO_OUTPUT_BUS_ENABLE:
+    bl OUTPUT_BUS_ENABLE
+    bl MEMORY_READ
+    bl OUTPUT_BUS_WRITE
+    bl OUTPUT_BUS_DISABLE
+b END_RUNTIME_STEP
+
+    DO_MEMORY_WRITE:
+    bl MEMORY_WRITE
+b END_RUNTIME_STEP
+
+    @r0 must have bus value for memset location
+    DO_MEMORY_SET_LOCATION:
+    bl READ_IN_BUS_VALUE
+    bl MEMORY_SET_LOCATION
+b END_RUNTIME_STEP
+
+    DO_BACK_PAGE:
+    bl MEMORY_BACK_PAGE
+b END_RUNTIME_STEP
+
+    DO_NEXT_PAGE:
+    bl MEMORY_NEXT_PAGE
+b END_RUNTIME_STEP
+
+    DO_RESET_PTR:
+    bl MEMORY_RESET_POINTER
+b END_RUNTIME_STEP
+
+    DO_HANDLE_OUT:
+    bl HANDLE_OUT
+b END_RUNTIME_STEP
+
+    DO_HANDLE_IN:
+    bl HANDLE_IN
+b END_RUNTIME_STEP
+
+    DO_HANDLE_HALT:
+    bl HANDLE_HALT
+b END_RUNTIME_STEP
+
+    END_RUNTIME_STEP:
+pop {pc}

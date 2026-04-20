@@ -12,11 +12,8 @@ pico_sdk_init()
 add_executable(memory_controller
     main.c
     memory.S
-    app.c
-    bus.c
-    memory.h
-    control.c
-    INITIALIZE_PINS.S
+    RUN_TIME.S
+    STRING_BUILDER.S
 	
 )
 
