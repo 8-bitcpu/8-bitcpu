@@ -166,19 +166,21 @@ bx lr
 @its possible this method can report to OLED "HALT DETECTED" kinda dealq
 .thumb_func
 HANDLE_HALT:
+push {lr}
     bl OUTPUT_BUS_DISABLE
     bl MEMORY_CLEAR_ALL @this clears the memory & resets the pointer 
     bl CLEAR_STRING_BUFFER
 
-bx lr
+pop {pc}
 
 @ GPIO PIN 21 = IN
 .thumb_func
 HANDLE_IN:
+push {lr}
     bl MEMORY_READ
     bl SB_DETERMINE_ASCII
     bl SB_APPEND_CHAR
-bx lr 
+pop {pc}
 
 @ this will take the current string buffer and print it to the oled  and out pins
 .thumb_func
