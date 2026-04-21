@@ -16,6 +16,7 @@
 .extern MEM_BUFFER
 .extern PTR 
 .extern PAGE_SIZE
+.extern IN_BUS_VALUE
 
 .global MEMORY_CLEAR_ALL
 .global MEMORY_SET_LOCATION

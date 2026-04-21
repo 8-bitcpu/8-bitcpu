@@ -21,6 +21,11 @@
 .global HANDLE_OUT
 .global RUNTIME_STEP
 
+.global IN_BUS_VALUE
+.global GPIO_STATE
+.global CONTROL_PINS_STABLE
+.global PIO_PINS_STABLE
+
 .bss
 .align 2
 
@@ -117,7 +122,7 @@ READ_IN_BUS_VALUE:
     ldr r1, [r0]
     movs r2, #0xFF
     ands r1, r2
-    ldr r0, =INPUT_BUS
+    ldr r0, =IN_BUS_VALUE
     strb r1, [r0]
     movs r0, r1 @ little hacky but the bus value should just be kept in r0 for better integration later
 bx lr
@@ -175,7 +180,7 @@ HANDLE_IN:
     bl SB_APPEND_CHAR
 bx lr 
 
-@ this will take the current string buffer and print it to the oled screen
+@ this will take the current string buffer and print it to the oled  and out pins
 .thumb_func
 HANDLE_OUT:
 
@@ -187,16 +192,12 @@ bx lr
 RUNTIME_STEP:
     push {lr}
 
-    bl VERIFY_CONTROL_PINS_STABLE
-    bl VERIFY_PIO_PINS_STABLE
+    @ commented out for testing purposes 
+    @ bl VERIFY_CONTROL_PINS_STABLE
+    @ bl VERIFY_PIO_PINS_STABLE
     bl READ_IN_BUS_VALUE
 
     @ PRELOADS WILL BE DELT WITH LATER THIS SKELE MUST EXIST
-
-    ldr r0, =CONTROL_PINS_STABLE    @ halt case logic
-    ldrb r1, [r0]
-    cmp r1, #0
-    beq DO_HANDLE_HALT
 
     @ handle_in case logic
     ldr r0, =PIO_PINS_STABLE
@@ -216,6 +217,16 @@ RUNTIME_STEP:
     cmp r1, #0
     bne DO_HANDLE_OUT
 
+    @ halt case logic
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+    
+    movs r1, r3
+    movs r2, #0xC
+    ands r1, r2
+    cmp r1, r2
+    beq DO_HANDLE_HALT
+
     @ mem reset pointer logic
     ldr r0, =CONTROL_PINS_STABLE
     ldrb r3, [r0]
@@ -228,21 +239,23 @@ RUNTIME_STEP:
 
     @ do next page pogic 
     ldr r0, =CONTROL_PINS_STABLE
-    ldrb r1, [r0]
+    ldrb r3, [r0]
 
-    movs r2, #0x4
+    movs r1, r3
+    movs r2, #0xC
     ands r1, r2
-    cmp r1, #0
-    bne DO_NEXT_PAGE
+    cmp r1, #0x4
+    beq DO_NEXT_PAGE
 
     @ do back page pogic 
     ldr r0, =CONTROL_PINS_STABLE
-    ldrb r1, [r0]
+    ldrb r3, [r0]
 
-    movs r2, #0x8
+    movs r1, r3
+    movs r2, #0xC
     ands r1, r2
-    cmp r1, #0
-    bne DO_BACK_PAGE
+    cmp r1, #0x8
+    beq DO_BACK_PAGE
 
     @ mem set location logic 
     ldr r0, =CONTROL_PINS_STABLE

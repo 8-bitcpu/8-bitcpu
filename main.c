@@ -11,6 +11,11 @@ uint8_t STRING_BUFFER[256];
 uint8_t STRING_LEN; 
 uint8_t STING_MAX_SIZE = 255;
 
+extern uint8_t CONTROL_PINS_STABLE;
+extern uint8_t PIO_PINS_STABLE;
+extern uint32_t GPIO_STATE;
+extern uint8_t IN_BUS_VALUE;
+
 extern void INITIALIZE_PINS_BASIC(void);
 extern void MEMORY_CLEAR_ALL(void);
 extern void MEMORY_SET_LOCATION(void);
@@ -22,38 +27,49 @@ extern void MEMORY_BACK_PAGE(void);
 extern void READ_PINS_ASSIGN_VALUES(void);
 extern void RUNTIME_STEP(void);
 
-void print_state() 
+static void set_bus(uint8_t value) 
 {
-    printf("PTR: %u\n", PTR);
-
-    for (int i = 0; i < 16; i++) {
-        if (i == PTR)
-            printf("[%02X] ", MEM_BUFFER[i]);  // highlight current location
-        else
-            printf(" %02X  ", MEM_BUFFER[i]);
-    }
-    printf("\n");
+    GPIO_STATE = (GPIO_STATE & 0xFFFFFF00u) | value;
 }
 
-int main(void) 
+static void set_ptr() 
+{
+    CONTROL_PINS_STABLE = 0x3;   // READ + WRITE
+    PIO_PINS_STABLE = 0x0;
+    RUNTIME_STEP();
+}
+
+static void write_value() 
+{
+    CONTROL_PINS_STABLE = 0x2;   // WRITE only
+    PIO_PINS_STABLE = 0x0;
+    RUNTIME_STEP();
+}
+
+int main() 
 {
     stdio_init_all();
-    
-    int test_var = 1; 
     sleep_ms(8000);
-    while(1)
+
+
+    for(int i=0; i < 10; i++)
     {
-        if(test_var == 4)
-        {
-            MEMORY_CLEAR_ALL();
-        }
+        set_bus(i);
+        set_ptr();
+        set_bus(i);
+        write_value();
+    }
 
-        test_var++;
-        PTR++;
 
-        printf("testing");
-        sleep_ms(2000);
-        print_state();
-        RUNTIME_STEP();
+    printf("PTR=%u\n", PTR);
+
+    for (int i = 0; i <= 256; i++) 
+    {
+        printf("MEM_BUFFER[%d] = %u\n", i, MEM_BUFFER[i]);
+    }
+
+    while (1) 
+    {
+        tight_loop_contents();
     }
 }
