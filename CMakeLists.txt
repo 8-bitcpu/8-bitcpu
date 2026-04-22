@@ -11,15 +11,14 @@ pico_sdk_init()
 
 add_executable(memory_controller
     main.c
-    memory.S
+    memory.S 
     RUN_TIME.S
     STRING_BUILDER.S
-	
+    preloads.c
 )
 
 target_link_libraries(memory_controller
     pico_stdlib
-    hardware_gpio
 )
 
 pico_enable_stdio_usb(memory_controller 1)

@@ -7,7 +7,7 @@
 .extern MEM_BUFFER
 .extern PTR 
 .extern PAGE_SIZE
-
+.extern run_preload_cli
 
 .global READ_ALL_PINS
 .global VERIFY_PIO_PINS_STABLE
@@ -25,14 +25,20 @@
 .global GPIO_STATE
 .global CONTROL_PINS_STABLE
 .global PIO_PINS_STABLE
+.global PREV_PIO_PINS_STABLE
 
 .bss
 .align 2
 
-GPIO_STATE: .space 4 
+GPIO_STATE: .space 4
 PREV_GPIO_STATE: .space 4
+
 CONTROL_PINS_STABLE: .space 1
+PREV_CONTROL_PINS_STABLE: .space 1
+
 PIO_PINS_STABLE: .space 1
+PREV_PIO_PINS_STABLE: .space 1
+
 IN_BUS_VALUE: .space 1
 PRE_LOAD_PIN: .space 1
 
@@ -159,11 +165,14 @@ bx lr
 
 .thumb_func
 HANDLE_PRELOAD:
-@ask kyran how he wants to deal with preloads 
-bx lr 
+push {lr}
+    bl CLEAR_STRING_BUFFER
+    bl OUTPUT_BUS_DISABLE
+    bl run_preload_cli
+pop {pc}
 
 @ Halt means next and back pins are high 
-@its possible this method can report to OLED "HALT DETECTED" kinda dealq
+@its possible this method can report to OLED "HALT DETECTED" kinda deal
 .thumb_func
 HANDLE_HALT:
 push {lr}
@@ -183,10 +192,15 @@ push {lr}
 pop {pc}
 
 @ this will take the current string buffer and print it to the oled  and out pins
-.thumb_func
 HANDLE_OUT:
+    bl MEMORY_READ          @ r0 = current memory byte
+    mov r1, r0              @ save byte somewhere safe
 
-bx lr 
+    bl OUTPUT_BUS_ENABLE    @ may trash r0
+
+    mov r0, r1              @ restore byte for writer
+    bl OUTPUT_BUS_WRITE
+bx lr
 
 
 @ agony!!!
@@ -194,39 +208,76 @@ bx lr
 RUNTIME_STEP:
     push {lr}
 
-    @ commented out for testing purposes 
-    @ bl VERIFY_CONTROL_PINS_STABLE
-    @ bl VERIFY_PIO_PINS_STABLE
-    bl READ_IN_BUS_VALUE
+    @ commented out sometimes for testing purposes 
+    @bl VERIFY_CONTROL_PINS_STABLE
+    @bl VERIFY_PIO_PINS_STABLE
+    @bl READ_IN_BUS_VALUE
 
-    @ PRELOADS WILL BE DELT WITH LATER THIS SKELE MUST EXIST
+    CHECK_PRELOAD:
+        ldr r0, =PREV_PIO_PINS_STABLE
+        ldrb r1, [r0]
+
+        ldr r0, =PIO_PINS_STABLE
+        ldrb r3, [r0]
+
+        movs r2, #0x4          @ GP22 = PRELOAD
+
+        ands r1, r2
+        ands r3, r2
+
+        cmp r1, #0
+    bne CHECK_HANDLE_HALT
+
+        cmp r3, #0
+    bne DO_HANDLE_PRELOAD
 
     @ handle_in case logic
-    ldr r0, =PIO_PINS_STABLE
-    ldrb r1, [r0]
-    
-    movs r2, #0x2
-    ands r1, r2
-    cmp r1, #0 
+    CHECK_HANDLE_IN:
+        ldr r0, =PREV_PIO_PINS_STABLE
+        ldrb r1, [r0]
+
+        ldr r0, =PIO_PINS_STABLE
+        ldrb r3, [r0]
+
+        movs r2, #0x1          @ GP20 = IN
+
+        ands r1, r2            @ old IN bit
+        ands r3, r2            @ new IN bit
+
+        cmp r1, #0
+    bne CHECK_HANDLE_OUT
+
+        cmp r3, #0
     bne DO_HANDLE_IN
 
     @ handle_out case logic 
-    ldr r0, =PIO_PINS_STABLE
-    ldrb r1, [r0]
-    
-    movs r2, #0x4
-    ands r1, r2
-    cmp r1, #0
+    CHECK_HANDLE_OUT:
+        ldr r0, =PREV_PIO_PINS_STABLE
+        ldrb r1, [r0]
+
+        ldr r0, =PIO_PINS_STABLE
+        ldrb r3, [r0]
+
+        movs r2, #0x2          @ GP21 = OUT
+
+        ands r1, r2            @ old OUT bit
+        ands r3, r2            @ new OUT bit
+
+        cmp r1, #0
+    bne CHECK_HANDLE_HALT
+
+        cmp r3, #0
     bne DO_HANDLE_OUT
 
     @ halt case logic
-    ldr r0, =CONTROL_PINS_STABLE
-    ldrb r3, [r0]
-    
-    movs r1, r3
-    movs r2, #0xC
-    ands r1, r2
-    cmp r1, r2
+    CHECK_HANDLE_HALT:
+        ldr r0, =CONTROL_PINS_STABLE
+        ldrb r3, [r0]
+
+        movs r1, r3
+        movs r2, #0xC
+        ands r1, r2
+        cmp r1, r2
     beq DO_HANDLE_HALT
 
     @ mem reset pointer logic
@@ -237,7 +288,7 @@ RUNTIME_STEP:
     movs r2, #0xC
     ands r1, r2
     cmp r1, r2
-    beq DO_RESET_PTR
+beq DO_RESET_PTR
 
     @ do next page pogic 
     ldr r0, =CONTROL_PINS_STABLE
@@ -247,7 +298,7 @@ RUNTIME_STEP:
     movs r2, #0xC
     ands r1, r2
     cmp r1, #0x4
-    beq DO_NEXT_PAGE
+beq DO_NEXT_PAGE
 
     @ do back page pogic 
     ldr r0, =CONTROL_PINS_STABLE
@@ -257,7 +308,7 @@ RUNTIME_STEP:
     movs r2, #0xC
     ands r1, r2
     cmp r1, #0x8
-    beq DO_BACK_PAGE
+beq DO_BACK_PAGE
 
     @ mem set location logic 
     ldr r0, =CONTROL_PINS_STABLE
@@ -267,7 +318,7 @@ RUNTIME_STEP:
     movs r2, #0x3      @ READ + WRITE
     ands r1, r2
     cmp r1, r2
-    beq DO_MEMORY_SET_LOCATION
+beq DO_MEMORY_SET_LOCATION
 
     @logic for mem write 
     ldr r0, =CONTROL_PINS_STABLE
@@ -277,7 +328,7 @@ RUNTIME_STEP:
     movs r2, #0x3
     ands r1, r2
     cmp r1, #0x2
-    beq DO_MEMORY_WRITE
+beq DO_MEMORY_WRITE
 
     @ output_bus_write logic
     @ this method takes the value at whereever mem pointer is and gives it to the output bus
@@ -288,9 +339,14 @@ RUNTIME_STEP:
     movs r2, #0x3
     ands r1, r2
     cmp r1, #0x1
-    beq DO_OUTPUT_BUS_ENABLE
+beq DO_OUTPUT_BUS_ENABLE
 
     @ "default case" do nothing mayb make this report somewhere if happens
+    b END_RUNTIME_STEP
+
+
+    DO_HANDLE_PRELOAD:
+    bl HANDLE_PRELOAD
     b END_RUNTIME_STEP
 
     DO_OUTPUT_BUS_ENABLE:
