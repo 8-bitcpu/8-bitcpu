@@ -155,17 +155,17 @@ bx lr
 
 .thumb_func
 OUTPUT_BUS_WRITE:
-    @ huh? looks like this just writes directly to the output reg
     movs r2, #0xFF
     ands r0, r2
-    lsls r0, r0, #12            @ line up with GP12-GP19
+    lsls r0, r0, #12
 
-    ldr r1, =0xD0000020         @ SIO GPIO_OUT_CLR
-    ldr r2, =0x000FF000         @ bus mask
-    str r2, [r1]                @ clear old bus bits
+    ldr r1, =0xD0000018     @ GPIO_OUT_CLR
+    ldr r2, =0x000FF000
+    str r2, [r1]
 
-    ldr r1, =0xD0000018         @ SIO GPIO_OUT_SET
-    str r0, [r1]                @ set new bus bits
+    ldr r1, =0xD0000014     @ GPIO_OUT_SET
+    str r0, [r1]
+
 bx lr
 
 @ r4 is saved here because C needs 8 byte offset or it wont play nice
@@ -181,33 +181,35 @@ pop {r4 ,pc}
 @its possible this method can report to OLED "HALT DETECTED" kinda deal
 .thumb_func
 HANDLE_HALT:
-push {lr}
+push {r4, lr}
     bl OUTPUT_BUS_DISABLE
     bl MEMORY_CLEAR_ALL @this clears the memory & resets the pointer 
     bl CLEAR_STRING_BUFFER
 
-pop {pc}
+pop {r4, pc}
 
 
 .thumb_func
 HANDLE_IN:
-push {lr}
+push {r4, lr}
     bl MEMORY_READ
     bl SB_DETERMINE_ASCII
     bl SB_APPEND_CHAR
-pop {pc}
+pop {r4, pc}
 
 @ this will take the current string buffer and print it to the oled  and out pins
+.thumb_func
 HANDLE_OUT:
-    push {r4, lr}
+push {r4, lr}
 
-    bl MEMORY_READ          @ r0 = current memory byte
-    mov r1, r0              @ save byte somewhere safe
+    bl MEMORY_READ
+    mov r4, r0
 
-    bl OUTPUT_BUS_ENABLE    @ may trash r0
+    bl OUTPUT_BUS_ENABLE
 
-    mov r0, r1              @ restore byte for writer
+    mov r0, r4
     bl OUTPUT_BUS_WRITE
+
 pop {r4, pc}
 
 @ ------------------------------------------------------------------------ so i can find the top of the most important func easily
@@ -361,7 +363,8 @@ beq DO_OUTPUT_BUS_ENABLE
     bl OUTPUT_BUS_ENABLE
     bl MEMORY_READ
     bl OUTPUT_BUS_WRITE
-    bl OUTPUT_BUS_DISABLE
+    @ disabling the bus right after doesnt keep the leds on 
+    @bl OUTPUT_BUS_DISABLE
 b END_RUNTIME_STEP
 
     DO_MEMORY_WRITE:

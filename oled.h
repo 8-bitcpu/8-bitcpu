@@ -7,7 +7,9 @@
 void oled_init(void);
 void oled_clear(void);
 void oled_update(void);
+
 void oled_draw_string(int x, int page, const char *text);
+
 void oled_show_output_string(const char *text);
 void oled_show_halt(void);
 
@@ -21,7 +23,5 @@ void oled_show_memory_status(uint16_t pointer,
                              bool next_pin,
                              bool back_pin,
                              const char *sb_text);
-
-void oled_report_exact_repo_style(void);
 
 #endif

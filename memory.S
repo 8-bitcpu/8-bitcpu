@@ -68,9 +68,8 @@ MEMORY_READ:
     ldrb r1, [r1]
 
     ldr r2, =MEM_BUFFER
-    adds r2, r2, r1
-
-    ldrb r0, [r2]
+    ldrb r0, [r2, r1]
+    
 bx lr
 
 

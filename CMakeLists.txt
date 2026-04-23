@@ -21,6 +21,7 @@ add_executable(memory_controller
 
 target_link_libraries(memory_controller
     pico_stdlib
+    hardware_i2c
 )
 
 pico_enable_stdio_usb(memory_controller 1)
