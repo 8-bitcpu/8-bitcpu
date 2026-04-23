@@ -43,6 +43,7 @@ IN_BUS_VALUE: .space 1
 PRE_LOAD_PIN: .space 1
 
 .text
+
 .thumb_func
 READ_ALL_PINS:
     ldr r0, =0xD0000004
@@ -54,6 +55,7 @@ bx lr
 
 .thumb_func
 VERIFY_PIO_PINS_STABLE:
+push {r4, lr}
     bl READ_ALL_PINS
 
     ldr r2, =GPIO_STATE
@@ -63,30 +65,35 @@ VERIFY_PIO_PINS_STABLE:
     ands r0, r2
 
     movs r3, #255
-DUMB_LOOP:
-    subs r3, #1
-    bne DUMB_LOOP
+    DUMB_LOOP:
+        subs r3, #1
+        bne DUMB_LOOP
 
     bl READ_ALL_PINS
 
-    ldr r2, =GPIO_STATE
-    ldr r1, [r2]
-    lsrs r1, r1, #20
-    movs r2, #0x7
-    ands r1, r2
+        ldr r2, =GPIO_STATE
+        ldr r1, [r2]
+        lsrs r1, r1, #20
+        movs r2, #0x7
+        ands r1, r2
 
-    cmp r0, r1
-    beq P_STABLE_YES
-    b VERIFY_PIO_PINS_STABLE
+        cmp r0, r1
+    bne USE_SECOND_SAMPLE
 
-P_STABLE_YES:
-    ldr r0, =PIO_PINS_STABLE
-    strb r1, [r0]
-bx lr
+    P_STABLE_YES:
+        ldr r0, =PIO_PINS_STABLE
+        strb r1, [r0]
+pop {r4, pc}
+
+    USE_SECOND_SAMPLE:
+        ldr r0, =PIO_PINS_STABLE
+        strb r1, [r0]
+pop {r4, pc}
 
 
 .thumb_func
 VERIFY_CONTROL_PINS_STABLE:
+push {r4, lr}
     bl READ_ALL_PINS
 
     ldr r2, =GPIO_STATE
@@ -97,26 +104,29 @@ VERIFY_CONTROL_PINS_STABLE:
 
     movs r3, #255
     DUMB_LOOP2:
-    subs r3, #1
-        bne DUMB_LOOP2
-    
+        subs r3, #1
+    bne DUMB_LOOP2
+
     bl READ_ALL_PINS
 
-    ldr r2, =GPIO_STATE
-    ldr r1, [r2]
-    lsrs r1, r1, #8
-    movs r2, #0xF
-    ands r1, r2
+        ldr r2, =GPIO_STATE
+        ldr r1, [r2]
+        lsrs r1, r1, #8
+        movs r2, #0xF
+        ands r1, r2
 
-    cmp r0, r1
-
-        beq C_STABLE_YES
-    b VERIFY_CONTROL_PINS_STABLE
+        cmp r0, r1
+    bne USE_SECOND_CONTROL_SAMPLE
 
     C_STABLE_YES:
-    ldr r0, =CONTROL_PINS_STABLE
-    strb r1, [r0] 
-bx lr
+        ldr r0, =CONTROL_PINS_STABLE
+        strb r1, [r0]
+pop {r4, pc}
+
+    USE_SECOND_CONTROL_SAMPLE:
+        ldr r0, =CONTROL_PINS_STABLE
+        strb r1, [r0]
+pop {r4, pc}
 
 READ_IN_BUS_VALUE:
     ldr r0, =GPIO_STATE
@@ -196,18 +206,31 @@ HANDLE_OUT:
 
     mov r0, r1              @ restore byte for writer
     bl OUTPUT_BUS_WRITE
-bx lr
+bx lr   
 
-
+@ ------------------------------------------------------------------------ so i can find the top of the most important func easily
 @ agony!!!
 .thumb_func
 RUNTIME_STEP:
-    push {lr}
+push {r4, lr}
+
+    @ if we dont save the previous pins the entire runtime hangs
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r1, [r0]
+    ldr r2, =PREV_CONTROL_PINS_STABLE
+    strb r1, [r2]
+
+    
+    ldr r0, =PIO_PINS_STABLE
+    ldrb r1, [r0]
+    ldr r2, =PREV_PIO_PINS_STABLE
+    strb r1, [r2]
+
 
     @ commented out sometimes for testing purposes 
-    @bl VERIFY_CONTROL_PINS_STABLE
-    @bl VERIFY_PIO_PINS_STABLE
-    @bl READ_IN_BUS_VALUE
+    bl VERIFY_CONTROL_PINS_STABLE
+    bl VERIFY_PIO_PINS_STABLE
+    bl READ_IN_BUS_VALUE
 
     CHECK_PRELOAD:
         ldr r0, =PREV_PIO_PINS_STABLE
@@ -387,4 +410,4 @@ b END_RUNTIME_STEP
 b END_RUNTIME_STEP
 
     END_RUNTIME_STEP:
-pop {pc}
+pop {r4, pc}

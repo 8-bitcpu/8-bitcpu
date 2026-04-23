@@ -21,7 +21,8 @@ extern uint8_t IN_BUS_VALUE;
 
 extern void RUNTIME_STEP(void);
 extern void run_preload_cli(void);
-
+extern void VERIFY_CONTROL_PINS_STABLE(void);
+extern void VERIFY_PIO_PINS_STABLE(void);
 
 static void my_bus_init_input(void) {
     for (int i = 0; i < 8; i++) {
@@ -59,19 +60,46 @@ void print_mem_buffer(void) {
 int main() {
     stdio_init_all();
     sleep_ms(6000);
-    printf("PICO IS LIVE\n");
+
 
     
-    PREV_PIO_PINS_STABLE = 0x0;
-    PIO_PINS_STABLE = 0x4;
+        // --- INPUT BUS GP0–7 ---
+    for (int i = 0; i < 8; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_pull_down(i);
+    }
 
-    RUNTIME_STEP();
+    // --- CONTROL PINS GP8–11 ---
+    for (int i = 8; i <= 11; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_pull_down(i);
+    }
 
-    printf("runtime_step passed\n");
-    print_mem_buffer();
+    // --- PIO PINS GP20–22 ---
+    for (int i = 20; i <= 22; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_pull_down(i);
+    }
+    
 
-    while (1) {
-        printf("we made it to the end! now looping \n");
-        sleep_ms(1000);
+    printf("PICO IS LIVE\n");
+
+
+    int loop_counter = 0; 
+    while (1) 
+    {
+
+
+        printf("CTRL=0x%X PIO=0x%X\n", CONTROL_PINS_STABLE, PIO_PINS_STABLE);
+        
+        printf("\npre ref\n");
+        sleep_ms(3000);
+        RUNTIME_STEP();
+        print_mem_buffer();
+        printf("post ref loop: %d", loop_counter);
+        loop_counter++;
     }
 }
