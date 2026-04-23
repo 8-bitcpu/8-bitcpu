@@ -15,6 +15,8 @@ add_executable(memory_controller
     RUN_TIME.S
     STRING_BUILDER.S
     preloads.c
+    oled.c
+    oled.h
 )
 
 target_link_libraries(memory_controller

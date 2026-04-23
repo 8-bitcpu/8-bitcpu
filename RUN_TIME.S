@@ -199,6 +199,8 @@ pop {pc}
 
 @ this will take the current string buffer and print it to the oled  and out pins
 HANDLE_OUT:
+    push {r4, lr}
+
     bl MEMORY_READ          @ r0 = current memory byte
     mov r1, r0              @ save byte somewhere safe
 
@@ -206,7 +208,7 @@ HANDLE_OUT:
 
     mov r0, r1              @ restore byte for writer
     bl OUTPUT_BUS_WRITE
-bx lr   
+pop {r4, pc}
 
 @ ------------------------------------------------------------------------ so i can find the top of the most important func easily
 @ agony!!!
@@ -288,46 +290,33 @@ push {r4, lr}
         cmp r3, #0
     bne DO_HANDLE_OUT
 
-    @ halt case logic
-    CHECK_HANDLE_HALT:
-        ldr r0, =CONTROL_PINS_STABLE
-        ldrb r3, [r0]
-
-        movs r1, r3
-        movs r2, #0xC
-        ands r1, r2
-        cmp r1, r2
-    beq DO_HANDLE_HALT
-
-    @ mem reset pointer logic
+@ halt case logic
+CHECK_HANDLE_HALT:
     ldr r0, =CONTROL_PINS_STABLE
     ldrb r3, [r0]
-    
     movs r1, r3
     movs r2, #0xC
     ands r1, r2
     cmp r1, r2
-beq DO_RESET_PTR
+    beq DO_HANDLE_HALT
 
-    @ do next page pogic 
+@ do next page logic
     ldr r0, =CONTROL_PINS_STABLE
     ldrb r3, [r0]
-
     movs r1, r3
     movs r2, #0xC
     ands r1, r2
     cmp r1, #0x4
-beq DO_NEXT_PAGE
+    beq DO_NEXT_PAGE
 
-    @ do back page pogic 
+@ do back page logic
     ldr r0, =CONTROL_PINS_STABLE
     ldrb r3, [r0]
-
     movs r1, r3
     movs r2, #0xC
     ands r1, r2
     cmp r1, #0x8
-beq DO_BACK_PAGE
+    beq DO_BACK_PAGE
 
     @ mem set location logic 
     ldr r0, =CONTROL_PINS_STABLE
