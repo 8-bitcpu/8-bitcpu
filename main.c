@@ -20,6 +20,8 @@ extern uint32_t GPIO_STATE;
 extern uint8_t IN_BUS_VALUE;
 
 extern void RUNTIME_STEP(void);
+extern void run_preload_cli(void);
+
 
 static void my_bus_init_input(void) {
     for (int i = 0; i < 8; i++) {
@@ -49,23 +51,27 @@ static void my_control_init(void) {
 void print_mem_buffer(void) {
     printf("MEM_BUFFER:\n");
 
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 16; i++) {
         printf("%3d: %3u\n", i, MEM_BUFFER[i]);
     }
 }
 
 int main() {
     stdio_init_all();
-    sleep_ms(8000);
+    sleep_ms(6000);
     printf("PICO IS LIVE\n");
 
-    PREV_PIO_PINS_STABLE = 0x0;   // old preload low
-    PIO_PINS_STABLE      = 0x4;   // new preload high (GP22)
+    
+    PREV_PIO_PINS_STABLE = 0x0;
+    PIO_PINS_STABLE = 0x4;
+
     RUNTIME_STEP();
 
-    printf("runtime_step passed \n");
+    printf("runtime_step passed\n");
+    print_mem_buffer();
 
     while (1) {
-        print_mem_buffer();
+        printf("we made it to the end! now looping \n");
+        sleep_ms(1000);
     }
 }

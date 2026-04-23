@@ -10,25 +10,28 @@
 .global SB_DETERMINE_ASCII
 
 .text 
-.thumb_func 
+.thumb_func
 CLEAR_STRING_BUFFER:
     ldr r0, =STRING_BUFFER
-
     movs r1, #0
     movs r2, #8
 
-    INIT_SB_BUFFER_LOOP_8:
+CLEAR_SB_LOOP_8:
     movs r3, #32
 
-        INIT_SB_BUFFER_LOOP_32:
-            subs r3, r3, #1
-            strb r1, [r0]
-            adds r0, r0, #1 
-        bne INIT_SB_BUFFER_LOOP_32
+CLEAR_SB_LOOP_32:
+    strb r1, [r0]
+    adds r0, r0, #1
+    subs r3, r3, #1
+    bne CLEAR_SB_LOOP_32
 
-            subs r2, r2, #1
-        bne INIT_SB_BUFFER_LOOP_8
-bx lr
+    subs r2, r2, #1
+    bne CLEAR_SB_LOOP_8
+
+    ldr r0, =STRING_LEN
+    movs r1, #0
+    strb r1, [r0]
+    bx lr
 
 
 @ check STRING_LEN -> iff LEN > 255 break 

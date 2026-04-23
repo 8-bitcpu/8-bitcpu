@@ -42,11 +42,6 @@ PREV_PIO_PINS_STABLE: .space 1
 IN_BUS_VALUE: .space 1
 PRE_LOAD_PIN: .space 1
 
-@ GPIO 20 = preload memory
-@ GPIO 21 = IN 
-@ GPIO 22 = OUT 
-
-
 .text
 .thumb_func
 READ_ALL_PINS:
@@ -163,13 +158,14 @@ OUTPUT_BUS_WRITE:
     str r0, [r1]                @ set new bus bits
 bx lr
 
+@ r4 is saved here because C needs 8 byte offset or it wont play nice
 .thumb_func
 HANDLE_PRELOAD:
-push {lr}
+push {r4,lr}
     bl CLEAR_STRING_BUFFER
     bl OUTPUT_BUS_DISABLE
     bl run_preload_cli
-pop {pc}
+pop {r4 ,pc}
 
 @ Halt means next and back pins are high 
 @its possible this method can report to OLED "HALT DETECTED" kinda deal
@@ -182,7 +178,7 @@ push {lr}
 
 pop {pc}
 
-@ GPIO PIN 21 = IN
+
 .thumb_func
 HANDLE_IN:
 push {lr}

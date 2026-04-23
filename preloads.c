@@ -104,43 +104,45 @@ void preload_selected_program(void) {
 }
 
 void run_preload_cli(void) {
+    char line[512];
+
+    printf("we are in CLI\n");
+
     while (1) {
         printf("\n---PRELOAD MENU---\n");
-        printf("1) Flashy Lights\n");
-        printf("2) PLACE HOLDER\n");
-        printf("3) PLACE HOLDER\n");
-        printf("4) Write your own program!\n");
-        printf("5) Exit\n> ");
+        printf("1) test\n");
+        printf("2) count_up\n");
+        printf("3) blank\n");
+        printf("4) custom\n");
+        printf("5) exit\n> ");
 
-        int choice = getchar_timeout_us(0);
-        if (choice < 0) {
-            continue;
-        }
+        int choice = getchar();
+        printf("%c\n", choice);
 
         if (choice == '1') {
             preload_program_by_index(0);
-            printf("Loading program 'Flashy Lights'\n");
-            break;
+            printf("Loaded preset 1\n");
+            return;
         }
+
         if (choice == '2') {
             preload_program_by_index(1);
-            break;
+            printf("Loaded preset 2\n");
+            return;
         }
+
         if (choice == '3') {
             preload_program_by_index(2);
-            break;
+            printf("Loaded preset 3\n");
+            return;
         }
 
         if (choice == '4') {
-            printf("Enter bytes 0-255 separated by spaces, then press Enter:\n> ");
+            printf("Enter bytes 0-255 separated by spaces:\n> ");
 
-            char line[1024];
             int len = 0;
             while (1) {
-                int ch = getchar_timeout_us(0);
-                if (ch < 0) {
-                    continue;
-                }
+                int ch = getchar();
 
                 if (ch == '\r' || ch == '\n') {
                     line[len] = '\0';
@@ -156,7 +158,7 @@ void run_preload_cli(void) {
 
             if (preload_program_from_string(line)) {
                 printf("Custom program loaded.\n");
-                break;
+                return;
             } else {
                 printf("Invalid custom program. Try again.\n");
                 continue;
@@ -164,7 +166,10 @@ void run_preload_cli(void) {
         }
 
         if (choice == '5') {
-            break;
+            printf("Exiting preload menu.\n");
+            return;
         }
+
+        printf("Invalid selection.\n");
     }
 }
