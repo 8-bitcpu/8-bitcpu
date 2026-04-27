@@ -230,11 +230,11 @@ push {r4, lr}
     ldr r2, =PREV_PIO_PINS_STABLE
     strb r1, [r2]
 
-
+    
     @ commented out sometimes for testing purposes 
-    bl VERIFY_CONTROL_PINS_STABLE
-    bl VERIFY_PIO_PINS_STABLE
-    bl READ_IN_BUS_VALUE
+    @bl VERIFY_CONTROL_PINS_STABLE
+    @bl VERIFY_PIO_PINS_STABLE
+    @bl READ_IN_BUS_VALUE
 
     CHECK_PRELOAD:
         ldr r0, =PREV_PIO_PINS_STABLE
@@ -243,7 +243,7 @@ push {r4, lr}
         ldr r0, =PIO_PINS_STABLE
         ldrb r3, [r0]
 
-        movs r2, #0x4          @ GP22 = PRELOAD
+        movs r2, #0x1
 
         ands r1, r2
         ands r3, r2
@@ -262,7 +262,7 @@ push {r4, lr}
         ldr r0, =PIO_PINS_STABLE
         ldrb r3, [r0]
 
-        movs r2, #0x1          @ GP20 = IN
+        movs r2, #0x2
 
         ands r1, r2            @ old IN bit
         ands r3, r2            @ new IN bit
@@ -281,7 +281,7 @@ push {r4, lr}
         ldr r0, =PIO_PINS_STABLE
         ldrb r3, [r0]
 
-        movs r2, #0x2          @ GP21 = OUT
+        movs r2, #0x4
 
         ands r1, r2            @ old OUT bit
         ands r3, r2            @ new OUT bit

@@ -13,6 +13,8 @@
 #define OLED_SCL_PIN 27
 #define OLED_ADDR 0x3C
 
+
+
 static uint8_t oled_buffer[OLED_WIDTH * OLED_PAGE_COUNT];
 
 static const uint8_t font_ascii[95][5] = {

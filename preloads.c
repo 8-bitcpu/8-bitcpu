@@ -106,7 +106,7 @@ void preload_selected_program(void) {
 void run_preload_cli(void) {
     char line[512];
 
-    printf("we are in CLI\n");
+    printf("we are in CLI\n");  
 
     while (1) {
         printf("\n---PRELOAD MENU---\n");

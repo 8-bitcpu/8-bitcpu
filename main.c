@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "pico/stdlib.h"
 #include "oled.h"
+#include "tests.h"
 
 uint8_t MEM_BUFFER[256];
 uint8_t PTR;
@@ -52,10 +53,11 @@ static void my_control_init(void) {
 void print_mem_buffer(void) {
     printf("MEM_BUFFER:\n");
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 125; i++) {
         printf("%3d: %3u\n", i, MEM_BUFFER[i]);
     }
 }
+
 
 int main() {
     stdio_init_all();
@@ -75,7 +77,7 @@ int main() {
     while (1) 
     {
 
-        //oled display logic
+        //oled display logic, this sits really ugly here but fixing it is low prio
         bool read_pin  = (CONTROL_PINS_STABLE & 0x1) != 0;
         bool write_pin = (CONTROL_PINS_STABLE & 0x2) != 0;
         bool next_pin  = (CONTROL_PINS_STABLE & 0x4) != 0;
@@ -112,15 +114,17 @@ int main() {
                 (const char *)STRING_BUFFER
             );
         }
-        //end of oled display logic 
+        //end of oled display logic
 
-        printf("CTRL=0x%X PIO=0x%X\n", CONTROL_PINS_STABLE, PIO_PINS_STABLE);
-        
-        printf("\npre ref\n");
-        sleep_ms(6000);
-        RUNTIME_STEP();
-        print_mem_buffer();
-        printf("post ref loop: %d", loop_counter);
-        loop_counter++;
+        //stress_test_runtime();
+        test_runtime_handle_in();
+        //test_runtime_output_count();
+
+        while(1)
+        {
+            //sleep_ms(2000);
+            //print_mem_buffer();
+            //RUNTIME_STEP();
+        }
     }
 }

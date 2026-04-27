@@ -12,6 +12,7 @@
 .text 
 .thumb_func
 CLEAR_STRING_BUFFER:
+push {r4, lr}
     ldr r0, =STRING_BUFFER
     movs r1, #0
     movs r2, #8
@@ -31,7 +32,7 @@ CLEAR_SB_LOOP_32:
     ldr r0, =STRING_LEN
     movs r1, #0
     strb r1, [r0]
-    bx lr
+pop {r4, pc}
 
 
 @ check STRING_LEN -> iff LEN > 255 break 
@@ -39,6 +40,7 @@ CLEAR_SB_LOOP_32:
 @ ++LEN all values are 0 @ init so no need to add null term 
 @ r0 should hold the char to append after its been verified as a char or a "?"
 SB_APPEND_CHAR:
+push {r4, lr}
     ldr r3, =STRING_LEN
     ldrb r1, [r3]
 
@@ -58,19 +60,20 @@ SB_APPEND_CHAR:
     strb r0, [r2]
 
     END_SB_APPEND:
-bx lr
+pop {r4, pc}
 
 @ this ought to pass r0 as either a valid char or a "?"
 @ valid chars 32 - 126
 SB_DETERMINE_ASCII:
+push {r4, lr}
     cmp r0, #32
     blo END_SB_DETERMINE_ASCII_NONPRINTABLE
 
     cmp r0, #126
     bhi END_SB_DETERMINE_ASCII_NONPRINTABLE
 
-bx lr
+pop {r4, pc}
 
     END_SB_DETERMINE_ASCII_NONPRINTABLE:
     movs r0, #63
-bx lr
+pop {r4, pc}

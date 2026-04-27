@@ -17,6 +17,8 @@ add_executable(memory_controller
     preloads.c
     oled.c
     oled.h
+    tests.h
+    tests.c
 )
 
 target_link_libraries(memory_controller
