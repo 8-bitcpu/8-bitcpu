@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "oled.h"
 
 
 extern uint8_t MEM_BUFFER[256];
@@ -18,6 +19,8 @@ extern uint8_t IN_BUS_VALUE;
 
 extern void RUNTIME_STEP(void);
 extern void print_mem_buffer(void);
+extern void oled_print(void);
+
 
 // ------------------ INTERNAL HELPERS ------------------
 
@@ -104,6 +107,7 @@ void stress_test_runtime(void)
                        s, input_tests[b], PTR, classify_state(s));
 
                 RUNTIME_STEP();
+                oled_print();
 
                 printf("PTR: %u -> %u\n", ptr_before, PTR);
                 printf("MEM[%u]: 0x%02X -> 0x%02X\n",
@@ -173,4 +177,67 @@ void test_runtime_output_count(void)
 
         sleep_ms(300);
     }
+}
+
+void super_debug_report(void)
+{
+    uint32_t raw = gpio_get_all();
+
+    printf("\n--- SUPER DEBUG ---\n");
+
+    printf("RAW GPIO:        0x%08lX\n", raw);
+
+    printf("INPUT BUS GP0-7: 0x%02lX  dec:%lu\n",
+           raw & 0xFF,
+           raw & 0xFF);
+
+    printf("CONTROL STABLE:  0x%02X  R:%d W:%d N:%d B:%d\n",
+           CONTROL_PINS_STABLE,
+           !!(CONTROL_PINS_STABLE & 0x01),
+           !!(CONTROL_PINS_STABLE & 0x02),
+           !!(CONTROL_PINS_STABLE & 0x04),
+           !!(CONTROL_PINS_STABLE & 0x08));
+
+    printf("PIO STABLE:      0x%02X  PRE:%d IN:%d OUT:%d\n",
+           PIO_PINS_STABLE,
+           !!(PIO_PINS_STABLE & 0x01),
+           !!(PIO_PINS_STABLE & 0x02),
+           !!(PIO_PINS_STABLE & 0x04));
+
+    printf("DIRECT PINS:     GP8:%d GP9:%d GP10:%d GP11:%d GP20:%d GP21:%d GP22:%d\n",
+           gpio_get(8),
+           gpio_get(9),
+           gpio_get(10),
+           gpio_get(11),
+           gpio_get(20),
+           gpio_get(21),
+           gpio_get(22));
+
+    printf("PTR:             %u\n", PTR);
+    printf("MEM[PTR]:        %u  hex:0x%02X\n", MEM_BUFFER[PTR], MEM_BUFFER[PTR]);
+
+    printf("IN_BUS_VALUE:    %u  hex:0x%02X\n", IN_BUS_VALUE, IN_BUS_VALUE);
+
+    printf("OUT BUS GP12-19: ");
+    for (int i = 12; i <= 19; i++) {
+        printf("%d", gpio_get(i));
+    }
+    printf("\n");
+
+    printf("STRING_LEN:      %u\n", STRING_LEN);
+    printf("STRING_BUFFER:   \"");
+
+    for (uint8_t i = 0; i < STRING_LEN; i++) {
+        uint8_t c = STRING_BUFFER[i];
+
+        if (c >= 32 && c <= 126) {
+            printf("%c", c);
+        } else {
+            printf("\\x%02X", c);
+        }
+    }
+
+    printf("\"\n");
+
+    printf("-------------------\n");
 }

@@ -1,7 +1,0 @@
-ADD DIR 7
-NOT 
-NOT 
-SUB DIR 6
-NOT 
-NOT 
-JMP TO 0

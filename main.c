@@ -19,11 +19,13 @@ extern uint8_t PREV_PIO_PINS_STABLE;
 
 extern uint32_t GPIO_STATE;
 extern uint8_t IN_BUS_VALUE;
+extern uint8_t OUT_BUS_VALUE;
 
 extern void RUNTIME_STEP(void);
 extern void run_preload_cli(void);
 extern void VERIFY_CONTROL_PINS_STABLE(void);
 extern void VERIFY_PIO_PINS_STABLE(void);
+
 
 static void my_bus_init_input(void) {
     for (int i = 0; i < 8; i++) {
@@ -61,7 +63,7 @@ void print_mem_buffer(void) {
 
 int main() {
     stdio_init_all();
-    sleep_ms(6000);
+    sleep_ms(1000);
 
     oled_init();
 
@@ -69,62 +71,68 @@ int main() {
     my_bus_init_input();
     my_control_init();
 
+
+
     printf("PICO IS LIVE\n");
 
-    int loop_counter = 0; 
+    //stress_test_runtime();
 
+        MEM_BUFFER[0] = 215; 
+        MEM_BUFFER[1] = 209;
+        MEM_BUFFER[2] = 96;
+        MEM_BUFFER[3] = 96;
+        MEM_BUFFER[4] = 236;
+        MEM_BUFFER[5] = 96;
+        MEM_BUFFER[6] = 96;
+        MEM_BUFFER[7] = 112;
+        MEM_BUFFER[8] = 113;
 
     while (1) 
     {
 
-        //oled display logic, this sits really ugly here but fixing it is low prio
-        bool read_pin  = (CONTROL_PINS_STABLE & 0x1) != 0;
-        bool write_pin = (CONTROL_PINS_STABLE & 0x2) != 0;
-        bool next_pin  = (CONTROL_PINS_STABLE & 0x4) != 0;
-        bool back_pin  = (CONTROL_PINS_STABLE & 0x8) != 0;
 
-        bool in_pin    = (PIO_PINS_STABLE & 0x1) != 0;
-        bool out_pin   = (PIO_PINS_STABLE & 0x2) != 0;
-        bool preload   = (PIO_PINS_STABLE & 0x4) != 0;
+        
 
-        uint8_t current_value = MEM_BUFFER[PTR];
-
-        if (preload) {
-            oled_clear();
-            oled_draw_string(0, 3, "PRELOAD");
-            oled_update();
-        }
-        else if (next_pin && back_pin) {
-            oled_show_halt();
-        }
-        else if (in_pin && STRING_LEN > 0) {
-            oled_show_output_string((const char *)STRING_BUFFER);
-        }
-        else {
-            oled_show_memory_status(
-                PTR,
-                current_value,
-                IN_BUS_VALUE,
-                current_value,
-                out_pin || (read_pin && !write_pin),
-                read_pin,
-                write_pin,
-                next_pin,
-                back_pin,
-                (const char *)STRING_BUFFER
-            );
-        }
-        //end of oled display logic
-
+        RUNTIME_STEP();
+        //super_debug_report();
+        oled_print();
+        //make the oled print in these methods for bebugging
         //stress_test_runtime();
-        test_runtime_handle_in();
+        //test_runtime_handle_in();
         //test_runtime_output_count();
-
-        while(1)
-        {
-            //sleep_ms(2000);
-            //print_mem_buffer();
-            //RUNTIME_STEP();
-        }
     }
 }
+
+
+/*
+INPUT BUS (8-bit value read together)
+GP0  -> bit 0 (LSB)
+GP1  -> bit 1
+GP2  -> bit 2
+GP3  -> bit 3
+GP4  -> bit 4
+GP5  -> bit 5
+GP6  -> bit 6
+GP7  -> bit 7 (MSB)
+
+CONTROL PINS (primary logic triggers)
+GP8  -> READ
+GP9  -> WRITE
+GP10 -> NEXT
+GP11 -> BACK
+
+OUTPUT BUS (8-bit driven output)
+GP12 -> bit 0 (LSB)
+GP13 -> bit 1
+GP14 -> bit 2
+GP15 -> bit 3
+GP16 -> bit 4
+GP17 -> bit 5
+GP18 -> bit 6
+GP19 -> bit 7 (MSB)
+
+PIO / MODE PINS (higher-level behavior)
+GP20 -> PRELOAD
+GP21 -> IN
+GP22 -> OUT
+*/

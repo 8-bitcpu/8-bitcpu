@@ -1,34 +1,4 @@
 export PICO_SDK_PATH=$HOME/pico-sdk
 
-RUNTIME_STEP:
-    READ_ALL_PINS()
+read and write = 1 sets ptr to whatever value is on the bus 
 
-    derive:
-        preload_level
-        halt_level
-        next_level
-        back_level
-        in_level
-        out_level
-        read_level
-        write_level
-
-    derive edges:
-        in_rising
-        out_rising
-
-    priority:
-        if preload_level      -> HANDLE_PRELOAD
-        else if halt_level    -> HANDLE_HALT
-        else if in_rising     -> HANDLE_IN
-        else if out_rising    -> HANDLE_OUT
-        else if next_level && back_level -> MEMORY_RESET_POINTER
-        else if next_level    -> MEMORY_NEXT_PAGE
-        else if back_level    -> MEMORY_BACK_PAGE
-        else if write_level && read_level   -> MEMORY_SET_LOCATION
-        else if write_level && !read_level  -> MEMORY_WRITE
-        else if !write_level && read_level  -> maybe OUTPUT_BUS_WRITE / read behavior
-        else do nothing
-
-    save current GPIO state as previous
-    return

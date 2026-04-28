@@ -209,7 +209,6 @@ push {r4, lr}
 
     mov r0, r4
     bl OUTPUT_BUS_WRITE
-
 pop {r4, pc}
 
 @ ------------------------------------------------------------------------ so i can find the top of the most important func easily
@@ -224,17 +223,48 @@ push {r4, lr}
     ldr r2, =PREV_CONTROL_PINS_STABLE
     strb r1, [r2]
 
-    
+
     ldr r0, =PIO_PINS_STABLE
     ldrb r1, [r0]
     ldr r2, =PREV_PIO_PINS_STABLE
     strb r1, [r2]
 
-    
+
     @ commented out sometimes for testing purposes 
-    @bl VERIFY_CONTROL_PINS_STABLE
-    @bl VERIFY_PIO_PINS_STABLE
-    @bl READ_IN_BUS_VALUE
+    bl VERIFY_CONTROL_PINS_STABLE
+    bl VERIFY_PIO_PINS_STABLE
+    bl READ_IN_BUS_VALUE
+
+
+@ READ/WRITE control logic using GP8 + GP9
+    ldr r0, =CONTROL_PINS_STABLE
+    ldrb r3, [r0]
+
+    movs r1, r3
+    movs r2, #0x3      @ GP8 + GP9
+    ands r1, r2
+
+    cmp r1, r2
+    beq DO_MEMORY_SET_LOCATION
+
+    cmp r1, #0x1      @ GP8 only
+    beq DO_HANDLE_OUT
+
+    cmp r1, #0x2      @ GP9 only
+    beq DO_MEMORY_WRITE
+
+    @ GP8 / READ is low here, so disable the output bus
+    @ But do NOT exit RUNTIME_STEP, because preload/in/halt/etc still need to run.
+    movs r1, r3
+    movs r2, #0x1
+    ands r1, r2
+
+    cmp r1, #0
+    bne CHECK_PRELOAD
+
+    bl OUTPUT_BUS_DISABLE
+
+
 
     CHECK_PRELOAD:
         ldr r0, =PREV_PIO_PINS_STABLE
@@ -254,6 +284,7 @@ push {r4, lr}
         cmp r3, #0
     bne DO_HANDLE_PRELOAD
 
+
     @ handle_in case logic
     CHECK_HANDLE_IN:
         ldr r0, =PREV_PIO_PINS_STABLE
@@ -268,29 +299,11 @@ push {r4, lr}
         ands r3, r2            @ new IN bit
 
         cmp r1, #0
-    bne CHECK_HANDLE_OUT
+    bne CHECK_HANDLE_HALT
 
         cmp r3, #0
     bne DO_HANDLE_IN
 
-    @ handle_out case logic 
-    CHECK_HANDLE_OUT:
-        ldr r0, =PREV_PIO_PINS_STABLE
-        ldrb r1, [r0]
-
-        ldr r0, =PIO_PINS_STABLE
-        ldrb r3, [r0]
-
-        movs r2, #0x4
-
-        ands r1, r2            @ old OUT bit
-        ands r3, r2            @ new OUT bit
-
-        cmp r1, #0
-    bne CHECK_HANDLE_HALT
-
-        cmp r3, #0
-    bne DO_HANDLE_OUT
 
 @ halt case logic
 CHECK_HANDLE_HALT:
@@ -302,6 +315,7 @@ CHECK_HANDLE_HALT:
     cmp r1, r2
     beq DO_HANDLE_HALT
 
+
 @ do next page logic
     ldr r0, =CONTROL_PINS_STABLE
     ldrb r3, [r0]
@@ -310,6 +324,7 @@ CHECK_HANDLE_HALT:
     ands r1, r2
     cmp r1, #0x4
     beq DO_NEXT_PAGE
+
 
 @ do back page logic
     ldr r0, =CONTROL_PINS_STABLE
@@ -320,60 +335,27 @@ CHECK_HANDLE_HALT:
     cmp r1, #0x8
     beq DO_BACK_PAGE
 
-    @ mem set location logic 
-    ldr r0, =CONTROL_PINS_STABLE
-    ldrb r3, [r0]
 
-    movs r1, r3
-    movs r2, #0x3      @ READ + WRITE
-    ands r1, r2
-    cmp r1, r2
-beq DO_MEMORY_SET_LOCATION
-
-    @logic for mem write 
-    ldr r0, =CONTROL_PINS_STABLE
-    ldrb r3, [r0]
-
-    movs r1, r3
-    movs r2, #0x3
-    ands r1, r2
-    cmp r1, #0x2
-beq DO_MEMORY_WRITE
-
-    @ output_bus_write logic
-    @ this method takes the value at whereever mem pointer is and gives it to the output bus
-    ldr r0, =CONTROL_PINS_STABLE
-    ldrb r3, [r0]
-
-    movs r1, r3
-    movs r2, #0x3
-    ands r1, r2
-    cmp r1, #0x1
-beq DO_OUTPUT_BUS_ENABLE
-
-    @ "default case" do nothing mayb make this report somewhere if happens
+    @ default case
     b END_RUNTIME_STEP
 
 
     DO_HANDLE_PRELOAD:
     bl HANDLE_PRELOAD
-    b END_RUNTIME_STEP
-
-    DO_OUTPUT_BUS_ENABLE:
-    bl OUTPUT_BUS_ENABLE
-    bl MEMORY_READ
-    bl OUTPUT_BUS_WRITE
-    @ disabling the bus right after doesnt keep the leds on 
-    @bl OUTPUT_BUS_DISABLE
 b END_RUNTIME_STEP
+
 
     DO_MEMORY_WRITE:
     bl MEMORY_WRITE
 b END_RUNTIME_STEP
 
-    @r0 must have bus value for memset location
+
     DO_MEMORY_SET_LOCATION:
     bl READ_IN_BUS_VALUE
+
+    movs r1, #0x0F
+    ands r0, r1              @ keep only lowest 4 bits: GP0-GP3
+
     bl MEMORY_SET_LOCATION
 b END_RUNTIME_STEP
 
@@ -381,25 +363,36 @@ b END_RUNTIME_STEP
     bl MEMORY_BACK_PAGE
 b END_RUNTIME_STEP
 
+
     DO_NEXT_PAGE:
     bl MEMORY_NEXT_PAGE
 b END_RUNTIME_STEP
+
 
     DO_RESET_PTR:
     bl MEMORY_RESET_POINTER
 b END_RUNTIME_STEP
 
+
     DO_HANDLE_OUT:
     bl HANDLE_OUT
 b END_RUNTIME_STEP
+
+
+    DO_OUTPUT_BUS_DISABLE:
+    bl OUTPUT_BUS_DISABLE
+b END_RUNTIME_STEP
+
 
     DO_HANDLE_IN:
     bl HANDLE_IN
 b END_RUNTIME_STEP
 
+
     DO_HANDLE_HALT:
     bl HANDLE_HALT
 b END_RUNTIME_STEP
+
 
     END_RUNTIME_STEP:
 pop {r4, pc}

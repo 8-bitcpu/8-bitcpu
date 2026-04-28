@@ -1,0 +1,25 @@
+OLED:
+
+shows 
+MODE, PTR, IN BUS VALUE, OUT BUS VALUE
+
+"what has just happend indicator" 
+
+5 slots of mem_buffer with an arrow to show where ptr is 
+
+tiny flashy bar that shows each instance of runtime_step being called
+
+maybe errors
+
+----------------
+PUTTY: 
+
+all current global states 
+
+full memory 
+
+idk needs work prolly more logic to implement what i actually want
+
+
+
+
