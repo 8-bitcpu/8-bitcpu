@@ -11,19 +11,18 @@ pico_sdk_init()
 
 add_executable(memory_controller
     main.c
-    memory.c
-    app.c
-    bus.c
-    control.c
-    preload.c
-    string_builder.c
+    memory.S 
+    RUN_TIME.S
+    STRING_BUILDER.S
+    preloads.c
     oled.c
-    memory.s
+    oled.h
+    tests.h
+    tests.c
 )
 
 target_link_libraries(memory_controller
     pico_stdlib
-    hardware_gpio
     hardware_i2c
 )
 
