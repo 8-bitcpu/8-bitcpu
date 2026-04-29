@@ -10,7 +10,9 @@ uint8_t PAGE_SIZE = 16;
 
 uint8_t STRING_BUFFER[256];
 uint8_t STRING_LEN;
-uint8_t STING_MAX_SIZE = 255;
+uint8_t STRING_MAX_SIZE = 255;
+
+uint8_t OLED_LOCK_SCREEN = 0;
 
 extern uint8_t CONTROL_PINS_STABLE;
 
@@ -21,6 +23,7 @@ extern uint32_t GPIO_STATE;
 extern uint8_t IN_BUS_VALUE;
 extern uint8_t OUT_BUS_VALUE;
 
+extern void CLEAR_STRING_BUFFER(void);
 extern void RUNTIME_STEP(void);
 extern void run_preload_cli(void);
 extern void VERIFY_CONTROL_PINS_STABLE(void);
@@ -71,31 +74,64 @@ int main() {
     my_bus_init_input();
     my_control_init();
 
-
-
     printf("PICO IS LIVE\n");
 
     //stress_test_runtime();
 
-        MEM_BUFFER[0] = 215; 
-        MEM_BUFFER[1] = 209;
-        MEM_BUFFER[2] = 96;
-        MEM_BUFFER[3] = 96;
-        MEM_BUFFER[4] = 236;
-        MEM_BUFFER[5] = 96;
-        MEM_BUFFER[6] = 96;
-        MEM_BUFFER[7] = 112;
-        MEM_BUFFER[8] = 113;
+        //junk
+        // MEM_BUFFER[0] = 177;  // 10110001
+        // MEM_BUFFER[1] = 177;  // 10110001
+        // MEM_BUFFER[2] = 20;   // 00010100
+        // MEM_BUFFER[3] = 196;  // 11000100
+        // MEM_BUFFER[4] = 236;
+        // MEM_BUFFER[5] = 96;
+        // MEM_BUFFER[6] = 96;
+        // MEM_BUFFER[7] = 112;
+        // MEM_BUFFER[8] = 113;
+
+        //hello world program
+        // MEM_BUFFER[0]  = 0xB9;
+        // MEM_BUFFER[1]  = 0xBA;
+        // MEM_BUFFER[2]  = 0xBB;
+        // MEM_BUFFER[3]  = 0xBC;
+        // MEM_BUFFER[4]  = 0xBD;
+        // MEM_BUFFER[5]  = 0xBE;
+        // MEM_BUFFER[6]  = 0xBF;
+        // MEM_BUFFER[7]  = 0xC0;
+        // MEM_BUFFER[8]  = 0xF0;
+        // MEM_BUFFER[9]  = 0x48;
+        // MEM_BUFFER[10] = 0x69;
+        // MEM_BUFFER[11] = 0x57;
+        // MEM_BUFFER[12] = 0x72;
+        // MEM_BUFFER[13] = 0x6C;
+        // MEM_BUFFER[14] = 0x64;
+        // MEM_BUFFER[15] = 0x00;
+
+        MEM_BUFFER[0] = 0xB9;
+        MEM_BUFFER[1] = 0xBA;
+        MEM_BUFFER[2] = 0xBB;
+        MEM_BUFFER[3] = 0xBC;
+        MEM_BUFFER[4] = 0xBD;
+        MEM_BUFFER[5] = 0xBE;
+        MEM_BUFFER[6] = 0xBF;
+        MEM_BUFFER[7] = 0x70;
+        MEM_BUFFER[8] = 0x70;
+        MEM_BUFFER[9] = 0x48;
+        MEM_BUFFER[10] = 0x69;
+        MEM_BUFFER[11] = 0x57;
+        MEM_BUFFER[12] = 0x6F;
+        MEM_BUFFER[13] = 0x72;
+        MEM_BUFFER[14] = 0x6C;
+        MEM_BUFFER[15] = 0x64;
+        
 
     while (1) 
     {
 
-
-        
-
         RUNTIME_STEP();
-        //super_debug_report();
         oled_print();
+
+        //super_debug_report();
         //make the oled print in these methods for bebugging
         //stress_test_runtime();
         //test_runtime_handle_in();

@@ -34,11 +34,11 @@ CLEAR_SB_LOOP_32:
     strb r1, [r0]
 pop {r4, pc}
 
-
-@ check STRING_LEN -> iff LEN > 255 break 
-@ slide to LEN + 1 -> append 
-@ ++LEN all values are 0 @ init so no need to add null term 
+@ check STRING_LEN -> iff LEN > 255 break
+@ slide to LEN + 1 -> append
+@ ++LEN all values are 0 @ init so no need to add null term
 @ r0 should hold the char to append after its been verified as a char or a "?"
+
 SB_APPEND_CHAR:
 push {r4, lr}
     ldr r3, =STRING_LEN
@@ -64,6 +64,7 @@ pop {r4, pc}
 
 @ this ought to pass r0 as either a valid char or a "?"
 @ valid chars 32 - 126
+
 SB_DETERMINE_ASCII:
 push {r4, lr}
     cmp r0, #32
@@ -75,5 +76,5 @@ push {r4, lr}
 pop {r4, pc}
 
     END_SB_DETERMINE_ASCII_NONPRINTABLE:
-    movs r0, #63
+    movs r0, #0
 pop {r4, pc}

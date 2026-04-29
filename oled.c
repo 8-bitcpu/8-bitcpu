@@ -29,6 +29,13 @@ extern uint8_t IN_BUS_VALUE;
 extern uint8_t CONTROL_PINS_STABLE;
 extern uint8_t PIO_PINS_STABLE;
 
+extern uint8_t STRING_BUFFER[256];
+extern uint8_t STRING_LEN;
+extern uint8_t STRING_MAX_SIZE;
+
+extern uint8_t OLED_LOCK_SCREEN;
+
+
 // =========================
 // FRAMEBUFFER
 // =========================
@@ -305,7 +312,6 @@ static void oled_draw_border(void)
 // =========================
 void oled_print(void)
 {
-
     oled_clear();
     oled_draw_border();
 
@@ -316,25 +322,174 @@ void oled_print(void)
         !!(CONTROL_PINS_STABLE & 0x08)
     );
 
-    line(2, " PRE:%d IN:%d OUT:%d",
+    line(2, " P:%d I:%d O:%d PTR:%u",
         !!(PIO_PINS_STABLE & 0x01),
         !!(PIO_PINS_STABLE & 0x02),
-        !!(PIO_PINS_STABLE & 0x04)
+        !!(PIO_PINS_STABLE & 0x04),
+        PTR
     );
 
-    line(3, " IN BUS: %u", IN_BUS_VALUE);
+    line(3, " IN:%u OUT:%u",
+        IN_BUS_VALUE,
+        MEM_BUFFER[PTR]
+    );
 
-    line(4, " OUT BUS: %u", MEM_BUFFER[PTR]);
+    // Big STRING_BUFFER display using pages 4 and 5
+    {
+        char temp[17];
+        int len = (STRING_LEN > 16) ? 16 : STRING_LEN;
 
-    line(5, "MODE:%s PTR:%u", mode_string(), PTR);
+        for (int i = 0; i < len; i++) {
+            temp[i] = STRING_BUFFER[i];
+        }
+
+        temp[len] = '\0';
+
+        oled_draw_string_big(2, 4, temp);
+    }
 
     line(6, " %u %u [%u] %u %u",
-    MEM_BUFFER[(uint8_t)(PTR - 2)],
-    MEM_BUFFER[(uint8_t)(PTR - 1)],
-    MEM_BUFFER[PTR],
-    MEM_BUFFER[(uint8_t)(PTR + 1)],
-    MEM_BUFFER[(uint8_t)(PTR + 2)]
+        MEM_BUFFER[(uint8_t)(PTR - 2)],
+        MEM_BUFFER[(uint8_t)(PTR - 1)],
+        MEM_BUFFER[PTR],
+        MEM_BUFFER[(uint8_t)(PTR + 1)],
+        MEM_BUFFER[(uint8_t)(PTR + 2)]
     );
 
     oled_update();
+}
+
+void oled_edge_flash_animation(void)
+{
+    // Fill inward from the edges
+    for (int layer = 0; layer < 32; layer++) {
+        oled_clear();
+
+        for (int page = 0; page < OLED_PAGE_COUNT; page++) {
+            for (int x = 0; x < OLED_WIDTH; x++) {
+                for (int bit = 0; bit < 8; bit++) {
+                    int y = page * 8 + bit;
+
+                    if (x < layer ||
+                        x >= OLED_WIDTH - layer ||
+                        y < layer ||
+                        y >= OLED_HEIGHT - layer) {
+                        oled_buffer[page * OLED_WIDTH + x] |= (1u << bit);
+                    }
+                }
+            }
+        }
+
+        oled_update();
+        sleep_ms(25);
+    }
+
+    // Fully white flash
+    memset(oled_buffer, 0xFF, sizeof(oled_buffer));
+    oled_update();
+    sleep_ms(150);
+
+    // Open back up in reverse
+    for (int layer = 31; layer >= 0; layer--) {
+        oled_clear();
+
+        for (int page = 0; page < OLED_PAGE_COUNT; page++) {
+            for (int x = 0; x < OLED_WIDTH; x++) {
+                for (int bit = 0; bit < 8; bit++) {
+                    int y = page * 8 + bit;
+
+                    if (x < layer ||
+                        x >= OLED_WIDTH - layer ||
+                        y < layer ||
+                        y >= OLED_HEIGHT - layer) {
+                        oled_buffer[page * OLED_WIDTH + x] |= (1u << bit);
+                    }
+                }
+            }
+        }
+
+        oled_update();
+        sleep_ms(25);
+    }
+
+    oled_clear();
+    oled_update();
+}
+
+void oled_print_string_buffer(void)
+{
+    OLED_LOCK_SCREEN = 1;
+
+    oled_clear();
+    oled_edge_flash_animation();
+    oled_draw_border();
+
+
+    int line_num = 1;
+    int i = 0;
+
+    while (i < STRING_LEN && line_num <= 6) {
+        char temp[17]; // 16 chars + null
+        int j = 0;
+
+        while (j < 16 && i < STRING_LEN) {
+            temp[j++] = STRING_BUFFER[i++];
+        }
+
+        temp[j] = '\0';
+        line(line_num++, "%s", temp);
+    }
+
+    oled_update();
+}
+
+// Draw one 2x-tall character.
+// Width stays normal-ish, height becomes 16 pixels / 2 pages.
+void oled_draw_char_big(int x, int page, char c)
+{
+    if (x > OLED_WIDTH - 6) return;
+    if (page < 0 || page >= OLED_PAGE_COUNT - 1) return;
+
+    if ((unsigned char)c < 32 || c > 126) c = '?';
+
+    int top_offset = page * OLED_WIDTH + x;
+    int bot_offset = (page + 1) * OLED_WIDTH + x;
+
+    for (int col = 0; col < 5; col++) {
+        uint8_t src = font_ascii[c - 32][col];
+
+        uint8_t top = 0;
+        uint8_t bot = 0;
+
+        // Scale 8 vertical bits into 16 vertical bits.
+        for (int bit = 0; bit < 8; bit++) {
+            if (src & (1u << bit)) {
+                int big_bit = bit * 2;
+
+                if (big_bit < 8)
+                    top |= (1u << big_bit);
+                else
+                    bot |= (1u << (big_bit - 8));
+
+                if (big_bit + 1 < 8)
+                    top |= (1u << (big_bit + 1));
+                else
+                    bot |= (1u << ((big_bit + 1) - 8));
+            }
+        }
+
+        oled_buffer[top_offset + col] = top;
+        oled_buffer[bot_offset + col] = bot;
+    }
+
+    oled_buffer[top_offset + 5] = 0;
+    oled_buffer[bot_offset + 5] = 0;
+}
+
+void oled_draw_string_big(int x, int page, const char *text)
+{
+    while (*text && x <= OLED_WIDTH - 6) {
+        oled_draw_char_big(x, page, *text++);
+        x += 6;
+    }
 }
